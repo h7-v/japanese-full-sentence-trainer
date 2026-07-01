@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bunpro Full Sentence Trainer</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar" aria-label="App controls">
+        <div>
+          <h1>Bunpro Full Sentence Trainer</h1>
+          <p id="statusText">Checking local setup...</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="syncButton" type="button">Sync Bunpro</button>
+        </div>
+      </section>
+
+      <section class="trainer" aria-label="Sentence trainer">
+        <div class="prompt-panel">
+          <label class="hint-toggle" for="hintToggle">
+            <input id="hintToggle" type="checkbox">
+            Show grammar hints
+          </label>
+          <div class="practice-settings">
+            <label class="retry-setting" for="retryDelayInput">
+              Retry missed after
+              <input id="retryDelayInput" type="number" min="1" max="60" step="1" value="7">
+              min
+            </label>
+            <span id="retryStatus" aria-live="polite">No retries waiting</span>
+          </div>
+          <fieldset id="jlptFilter" class="jlpt-filter hidden">
+            <legend>JLPT levels</legend>
+            <div id="jlptFilterOptions" class="jlpt-options"></div>
+          </fieldset>
+          <div id="grammarHint" class="grammar-hint hidden">
+            <div class="meta-row">
+              <span id="jlptLevel">-</span>
+              <span id="grammarTitle">No grammar point loaded</span>
+            </div>
+            <p id="grammarMeaning" class="meaning"></p>
+          </div>
+          <span id="retryBadge" class="retry-badge hidden">Retry</span>
+          <h2 id="englishPrompt">Sync your Bunpro grammar points to begin.</h2>
+          <details>
+            <summary>Reference</summary>
+            <p id="referenceJapanese"></p>
+          </details>
+        </div>
+
+        <form id="answerForm" class="answer-panel">
+          <label for="answerInput">Your Japanese</label>
+          <textarea id="answerInput" rows="3" autocomplete="off" spellcheck="false" placeholder="日本語で入力してください"></textarea>
+          <div class="answer-actions">
+            <button id="gradeButton" type="submit">Grade</button>
+          </div>
+        </form>
+
+        <div id="resultPanel" class="result-panel hidden" aria-live="polite">
+          <div class="result-heading">
+            <span id="verdictPill"></span>
+            <span id="scoreText"></span>
+          </div>
+          <p id="feedbackText"></p>
+          <p id="bunproSentenceText"></p>
+          <p id="correctionText"></p>
+          <form id="drillForm" class="drill-panel hidden">
+            <label for="drillInput">Type the correct answer</label>
+            <div class="drill-row">
+              <input id="drillInput" type="text" autocomplete="off" spellcheck="false" placeholder="正しい答えを入力">
+              <button id="drillButton" type="submit">Check</button>
+            </div>
+            <p id="drillFeedback" aria-live="polite"></p>
+          </form>
+        </div>
+
+        <nav class="session-nav" aria-label="Session navigation">
+          <button id="previousButton" class="secondary" type="button">Previous</button>
+          <div class="session-nav-next">
+            <button id="skipMissedButton" class="secondary" type="button" disabled>Skip to missed</button>
+            <button id="nextButton" type="button">Next</button>
+          </div>
+        </nav>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
