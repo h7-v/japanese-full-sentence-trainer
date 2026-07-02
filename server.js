@@ -7,7 +7,9 @@ const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const CACHE_DIR = path.join(ROOT, "cache");
 const SYNC_CACHE_FILE = path.join(CACHE_DIR, "bunpro-sync.json");
+const ANKI_CACHE_FILE = path.join(CACHE_DIR, "anki-sync.json");
 const BUNPRO_BASE_URL = "https://api.bunpro.jp/api/frontend";
+const ANKI_CONNECT_URL = process.env.ANKI_CONNECT_URL || "http://127.0.0.1:8765";
 const DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 const DEFAULT_LLM_MODEL = "gemini-3.5-flash";
 const SRS_LEVELS = ["beginner", "adept", "seasoned", "expert", "master"];
@@ -29,11 +31,16 @@ const state = {
   overview: null,
   grammarPoints: [],
   sentences: [],
+  ankiSentences: [],
+  ankiSyncedAt: null,
+  ankiSyncedAtDisplay: null,
+  ankiDeck: null,
   grammarById: new Map(),
   hydrateCache: new Map()
 };
 
 loadSyncCache();
+loadAnkiCache();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -48,8 +55,13 @@ const server = http.createServer(async (req, res) => {
         llmBaseUrl: config.llmBaseUrl,
         syncedAt: state.syncedAt,
         syncedAtDisplay: state.syncedAtDisplay,
+        ankiSyncedAt: state.ankiSyncedAt,
+        ankiSyncedAtDisplay: state.ankiSyncedAtDisplay,
+        ankiDeck: state.ankiDeck,
         grammarPointCount: state.grammarPoints.length,
-        sentenceCount: state.sentences.length,
+        bunproSentenceCount: state.sentences.length,
+        ankiSentenceCount: state.ankiSentences.length,
+        sentenceCount: getAllSentences().length,
         jlptLevels: getAvailableJlptLevels(),
         overview: state.overview
       });
@@ -61,21 +73,44 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/sentences") {
-      if (state.sentences.length === 0) {
+      if (getAllSentences().length === 0) {
         await syncBunpro();
       }
       return sendJson(res, 200, {
-        sentences: state.sentences,
+        sentences: getAllSentences(),
         jlptLevels: getAvailableJlptLevels()
       });
     }
 
     if (req.method === "GET" && url.pathname === "/api/random") {
-      if (state.sentences.length === 0) {
+      if (getAllSentences().length === 0) {
         await syncBunpro();
       }
-      const sentence = chooseRandom(state.sentences);
+      const sentence = chooseRandom(getAllSentences());
       return sendJson(res, 200, { sentence });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/anki/decks") {
+      const decks = await getAnkiDecks();
+      return sendJson(res, 200, { decks });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/anki/fields") {
+      const body = await readJson(req);
+      const result = await getAnkiFields(body);
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/anki/preview") {
+      const body = await readJson(req);
+      const result = await previewAnkiImport(body);
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/anki/import") {
+      const body = await readJson(req);
+      const result = await importAnkiSentences(body);
+      return sendJson(res, 200, result);
     }
 
     if (req.method === "POST" && url.pathname === "/api/grade") {
@@ -155,6 +190,162 @@ async function syncBunpro() {
   };
   saveSyncCache();
   return result;
+}
+
+async function getAnkiDecks() {
+  const decks = await ankiConnect("deckNames");
+  return Array.isArray(decks) ? decks.sort((a, b) => a.localeCompare(b)) : [];
+}
+
+async function getAnkiFields(body) {
+  const deck = requireNonEmptyString(body?.deck, "Anki deck is required.");
+  const noteIds = await findAnkiNotes(deck);
+  const sampleNotes = await getAnkiNotes(noteIds.slice(0, 100));
+  const fields = collectAnkiFieldNames(sampleNotes);
+  return {
+    deck,
+    noteCount: noteIds.length,
+    fields
+  };
+}
+
+async function previewAnkiImport(body) {
+  const deck = requireNonEmptyString(body?.deck, "Anki deck is required.");
+  const englishField = requireNonEmptyString(body?.englishField, "English field is required.");
+  const japaneseField = requireNonEmptyString(body?.japaneseField, "Japanese field is required.");
+  const noteIds = await findAnkiNotes(deck);
+  const notes = await getAnkiNotes(noteIds.slice(0, 200));
+  const sentences = normalizeAnkiNotes(notes, { deck, englishField, japaneseField }).slice(0, 10);
+  return {
+    deck,
+    noteCount: noteIds.length,
+    preview: sentences.map((sentence) => ({
+      id: sentence.id,
+      english: sentence.english,
+      japanese: sentence.japanese
+    }))
+  };
+}
+
+async function importAnkiSentences(body) {
+  const deck = requireNonEmptyString(body?.deck, "Anki deck is required.");
+  const englishField = requireNonEmptyString(body?.englishField, "English field is required.");
+  const japaneseField = requireNonEmptyString(body?.japaneseField, "Japanese field is required.");
+  const noteIds = await findAnkiNotes(deck);
+  const sentences = [];
+
+  for (let i = 0; i < noteIds.length; i += 100) {
+    const notes = await getAnkiNotes(noteIds.slice(i, i + 100));
+    sentences.push(...normalizeAnkiNotes(notes, { deck, englishField, japaneseField }));
+  }
+
+  state.ankiSyncedAt = new Date().toISOString();
+  state.ankiSyncedAtDisplay = formatLocalTimestamp(state.ankiSyncedAt);
+  state.ankiDeck = deck;
+  state.ankiSentences = dedupeSentences(sentences);
+  saveAnkiCache();
+
+  return {
+    deck,
+    noteCount: noteIds.length,
+    importedSentenceCount: state.ankiSentences.length,
+    ankiSyncedAt: state.ankiSyncedAt,
+    ankiSyncedAtDisplay: state.ankiSyncedAtDisplay,
+    sentenceCount: getAllSentences().length,
+    grammarPointCount: state.grammarPoints.length,
+    jlptLevels: getAvailableJlptLevels()
+  };
+}
+
+async function findAnkiNotes(deck) {
+  return ankiConnect("findNotes", { query: `deck:${quoteAnkiQuery(deck)}` });
+}
+
+async function getAnkiNotes(noteIds) {
+  if (!Array.isArray(noteIds) || noteIds.length === 0) return [];
+  return ankiConnect("notesInfo", { notes: noteIds });
+}
+
+async function ankiConnect(action, params = {}) {
+  let response;
+  try {
+    response = await fetch(ANKI_CONNECT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, version: 6, params })
+    });
+  } catch (error) {
+    const err = new Error(`AnkiConnect request failed: ${action}`);
+    err.statusCode = 502;
+    err.publicMessage = "AnkiConnect request failed.";
+    err.publicDetail = "Make sure Anki is open, AnkiConnect is installed, and ANKI_CONNECT_URL is correct.";
+    throw err;
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.error) {
+    const err = new Error(`AnkiConnect request failed: ${action}`);
+    err.statusCode = response.ok ? 502 : response.status;
+    err.publicMessage = "AnkiConnect request failed.";
+    err.publicDetail = payload.error || response.statusText || "Make sure Anki is open and the AnkiConnect add-on is installed.";
+    throw err;
+  }
+  return payload.result;
+}
+
+function collectAnkiFieldNames(notes) {
+  const fields = new Set();
+  for (const note of notes) {
+    for (const fieldName of Object.keys(note?.fields || {})) {
+      fields.add(fieldName);
+    }
+  }
+  return Array.from(fields).sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeAnkiNotes(notes, options) {
+  const sentences = [];
+  for (const note of notes) {
+    const english = cleanAnkiField(note?.fields?.[options.englishField]?.value || "");
+    const japanese = cleanAnkiField(note?.fields?.[options.japaneseField]?.value || "");
+    if (!english || !japanese) continue;
+    sentences.push({
+      id: `anki:${note.noteId}`,
+      source: "anki",
+      grammarPointId: `anki:${options.deck}`,
+      grammarTitle: options.deck,
+      grammarSlug: "anki",
+      grammarMeaning: "Imported from Anki",
+      jlptLevel: "Anki",
+      english,
+      japanese,
+      answer: "",
+      questionType: "anki",
+      audio: {
+        male: "",
+        female: ""
+      }
+    });
+  }
+  return sentences;
+}
+
+function cleanAnkiField(value) {
+  return stripHtml(String(value || "")
+    .replace(/\[sound:[^\]]+\]/g, "")
+    .replace(/{{c\d+::(.*?)(?:::.*?)?}}/g, "$1"));
+}
+
+function quoteAnkiQuery(value) {
+  return `"${String(value || "").replace(/"/g, "\\\"")}"`;
+}
+
+function requireNonEmptyString(value, message) {
+  const text = String(value || "").trim();
+  if (text) return text;
+  const err = new Error(message);
+  err.statusCode = 400;
+  err.publicMessage = message;
+  throw err;
 }
 
 async function fetchSrsLevel(level, page) {
@@ -515,11 +706,32 @@ function uniqueNonEmptyStrings(values) {
 
 function getAvailableJlptLevels() {
   const levels = new Set();
-  for (const sentence of state.sentences) {
+  for (const sentence of getAllSentences()) {
     const level = normalizeJlptLevel(sentence.jlptLevel);
     if (level) levels.add(level);
   }
   return Array.from(levels).sort(compareJlptLevels);
+}
+
+function getAllSentences() {
+  return [...state.sentences, ...state.ankiSentences];
+}
+
+function dedupeSentences(sentences) {
+  const seen = new Set();
+  const deduped = [];
+  for (const sentence of sentences) {
+    const key = [
+      sentence.source || "",
+      sentence.id || "",
+      sentence.english || "",
+      sentence.japanese || ""
+    ].join("\u0000").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(sentence);
+  }
+  return deduped;
 }
 
 function normalizeJlptLevel(level) {
@@ -574,6 +786,36 @@ function applySyncCache(payload) {
     if (point.id) state.hydrateCache.set(String(point.id), point);
     if (point.slug) state.hydrateCache.set(String(point.slug), point);
   }
+}
+
+function loadAnkiCache() {
+  if (!fs.existsSync(ANKI_CACHE_FILE)) return;
+  try {
+    const payload = JSON.parse(fs.readFileSync(ANKI_CACHE_FILE, "utf8"));
+    applyAnkiCache(payload);
+    console.log("Loaded Anki import cache.");
+  } catch (error) {
+    console.warn(`Could not load Anki import cache: ${error.message}`);
+  }
+}
+
+function saveAnkiCache() {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  const payload = {
+    savedAt: new Date().toISOString(),
+    ankiSyncedAt: state.ankiSyncedAt,
+    ankiSyncedAtDisplay: state.ankiSyncedAtDisplay,
+    ankiDeck: state.ankiDeck,
+    ankiSentences: state.ankiSentences
+  };
+  fs.writeFileSync(ANKI_CACHE_FILE, JSON.stringify(payload, null, 2));
+}
+
+function applyAnkiCache(payload) {
+  state.ankiSyncedAt = payload.ankiSyncedAt || payload.savedAt || null;
+  state.ankiSyncedAtDisplay = payload.ankiSyncedAtDisplay || formatLocalTimestamp(state.ankiSyncedAt);
+  state.ankiDeck = payload.ankiDeck || null;
+  state.ankiSentences = Array.isArray(payload.ankiSentences) ? payload.ankiSentences : [];
 }
 
 function formatLocalTimestamp(isoTimestamp) {

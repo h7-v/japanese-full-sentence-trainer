@@ -27,6 +27,15 @@ const retryStatus = document.querySelector("#retryStatus");
 const retryBadge = document.querySelector("#retryBadge");
 const jlptFilter = document.querySelector("#jlptFilter");
 const jlptFilterOptions = document.querySelector("#jlptFilterOptions");
+const ankiConnectButton = document.querySelector("#ankiConnectButton");
+const ankiDeckSelect = document.querySelector("#ankiDeckSelect");
+const ankiEnglishFieldSelect = document.querySelector("#ankiEnglishFieldSelect");
+const ankiJapaneseFieldSelect = document.querySelector("#ankiJapaneseFieldSelect");
+const ankiPreviewButton = document.querySelector("#ankiPreviewButton");
+const ankiImportButton = document.querySelector("#ankiImportButton");
+const ankiStatus = document.querySelector("#ankiStatus");
+const ankiPreview = document.querySelector("#ankiPreview");
+const ankiFields = Array.from(document.querySelectorAll(".anki-field"));
 
 let currentSentence = null;
 let currentCorrectAnswers = [];
@@ -39,6 +48,7 @@ let sentencePool = [];
 let availableJlptLevels = [];
 let selectedJlptLevels = new Set();
 let busy = false;
+let ankiBusy = false;
 
 syncButton.addEventListener("click", syncBunpro);
 previousButton.addEventListener("click", showPreviousSentence);
@@ -51,6 +61,10 @@ answerInput.addEventListener("input", saveCurrentDraft);
 drillInput.addEventListener("input", saveCurrentDraft);
 retryDelayInput.addEventListener("change", updateRetryDelayPreference);
 jlptFilterOptions.addEventListener("change", updateJlptFilterPreference);
+ankiConnectButton.addEventListener("click", loadAnkiDecks);
+ankiDeckSelect.addEventListener("change", loadAnkiFields);
+ankiPreviewButton.addEventListener("click", previewAnkiImport);
+ankiImportButton.addEventListener("click", importAnkiSentences);
 setInterval(updateRetryStatus, 15000);
 
 boot();
@@ -201,14 +215,162 @@ async function gradeAnswer(event) {
 function renderStatus(status) {
   const tokenStatus = status.hasBunproToken === false ? "Bunpro token missing" : "Bunpro ready";
   const llmStatus = status.hasLlmCredentials === false ? "LLM key missing" : `Grading with ${status.model || "configured model"}`;
+  const sourceCounts = [];
+  if (status.bunproSentenceCount) sourceCounts.push(`${status.bunproSentenceCount} Bunpro`);
+  if (status.ankiSentenceCount) sourceCounts.push(`${status.ankiSentenceCount} Anki`);
   const counts = status.sentenceCount
-    ? `${status.grammarPointCount} grammar points, ${status.sentenceCount} sentences`
+    ? `${status.grammarPointCount || 0} grammar points, ${status.sentenceCount} sentences${sourceCounts.length ? ` (${sourceCounts.join(", ")})` : ""}`
     : "Not synced";
-  const lastSync = status.syncedAt
-    ? `Last sync ${formatSyncTime(status.syncedAt)}`
+  const syncTimes = [];
+  if (status.syncedAt) syncTimes.push(`Bunpro ${formatSyncTime(status.syncedAt)}`);
+  if (status.ankiSyncedAt) syncTimes.push(`Anki ${formatSyncTime(status.ankiSyncedAt)}`);
+  const lastSync = syncTimes.length
+    ? `Last sync ${syncTimes.join(", ")}`
     : "No local sync cache yet";
   lastStatusText = `${tokenStatus}. ${llmStatus}. ${counts}. ${lastSync}.`;
   restoreStatusText();
+}
+
+async function loadAnkiDecks() {
+  setAnkiBusy(true, "Connecting to Anki...");
+  try {
+    const payload = await api("/api/anki/decks");
+    populateSelect(ankiDeckSelect, payload.decks || []);
+    const hasDecks = ankiDeckSelect.options.length > 0;
+    ankiFields[0].classList.toggle("hidden", !hasDecks);
+    ankiStatus.textContent = hasDecks ? "Choose a deck, then choose the fields to import." : "No Anki decks found.";
+    if (hasDecks) {
+      await loadAnkiFields();
+    }
+  } catch (error) {
+    ankiStatus.textContent = error.message;
+  } finally {
+    setAnkiBusy(false);
+  }
+}
+
+async function loadAnkiFields() {
+  const deck = ankiDeckSelect.value;
+  if (!deck) return;
+  setAnkiBusy(true, "Loading fields...");
+  try {
+    const payload = await api("/api/anki/fields", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deck })
+    });
+    const fields = payload.fields || [];
+    populateSelect(ankiEnglishFieldSelect, fields);
+    populateSelect(ankiJapaneseFieldSelect, fields);
+    selectLikelyField(ankiEnglishFieldSelect, ["english", "translation", "meaning", "front"]);
+    selectLikelyField(ankiJapaneseFieldSelect, ["japanese", "sentence", "expression", "back"]);
+
+    const hasFields = fields.length > 0;
+    ankiFields.slice(1).forEach((field) => field.classList.toggle("hidden", !hasFields));
+    ankiPreviewButton.classList.toggle("hidden", !hasFields);
+    ankiImportButton.classList.toggle("hidden", !hasFields);
+    ankiPreview.classList.add("hidden");
+    ankiPreview.textContent = "";
+    ankiStatus.textContent = hasFields
+      ? `${payload.noteCount || 0} notes found in ${deck}.`
+      : `No fields found in ${deck}.`;
+  } catch (error) {
+    ankiStatus.textContent = error.message;
+  } finally {
+    setAnkiBusy(false);
+  }
+}
+
+async function previewAnkiImport() {
+  const options = getAnkiImportOptions();
+  if (!options) return;
+  setAnkiBusy(true, "Previewing import...");
+  try {
+    const payload = await api("/api/anki/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options)
+    });
+    renderAnkiPreview(payload.preview || []);
+    ankiStatus.textContent = `${payload.noteCount || 0} notes found. Previewing up to 10 usable sentence pairs.`;
+  } catch (error) {
+    ankiStatus.textContent = error.message;
+  } finally {
+    setAnkiBusy(false);
+  }
+}
+
+async function importAnkiSentences() {
+  const options = getAnkiImportOptions();
+  if (!options) return;
+  setAnkiBusy(true, "Importing Anki sentences...");
+  try {
+    const result = await api("/api/anki/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options)
+    });
+    const status = await api("/api/status");
+    renderStatus(status);
+    await loadSentencePool({ resetLevels: true });
+    resetSessionHistory();
+    await showNextSentence();
+    ankiStatus.textContent = `Imported ${result.importedSentenceCount || 0} sentence pairs from ${result.deck}.`;
+  } catch (error) {
+    ankiStatus.textContent = error.message;
+  } finally {
+    setAnkiBusy(false);
+  }
+}
+
+function getAnkiImportOptions() {
+  const deck = ankiDeckSelect.value;
+  const englishField = ankiEnglishFieldSelect.value;
+  const japaneseField = ankiJapaneseFieldSelect.value;
+  if (!deck || !englishField || !japaneseField) {
+    ankiStatus.textContent = "Choose a deck, English field, and Japanese field first.";
+    return null;
+  }
+  return { deck, englishField, japaneseField };
+}
+
+function renderAnkiPreview(sentences) {
+  ankiPreview.textContent = "";
+  ankiPreview.classList.toggle("hidden", sentences.length === 0);
+  for (const sentence of sentences) {
+    const row = document.createElement("div");
+    row.className = "anki-preview-row";
+
+    const english = document.createElement("p");
+    english.textContent = sentence.english;
+
+    const japanese = document.createElement("p");
+    japanese.textContent = sentence.japanese;
+
+    row.append(english, japanese);
+    ankiPreview.append(row);
+  }
+  if (sentences.length === 0) {
+    ankiStatus.textContent = "No usable sentence pairs found with those fields.";
+  }
+}
+
+function populateSelect(select, values) {
+  select.textContent = "";
+  for (const value of values) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.append(option);
+  }
+}
+
+function selectLikelyField(select, candidates) {
+  const option = Array.from(select.options).find((item) => {
+    const value = item.value.toLowerCase();
+    return candidates.some((candidate) => value.includes(candidate));
+  });
+  if (option) select.value = option.value;
 }
 
 async function loadSentencePool(options = {}) {
@@ -285,6 +447,7 @@ function compareJlptLevels(a, b) {
 }
 
 function formatJlptLabel(level) {
+  if (level === "ANKI") return "Anki";
   return level.replace(/^JLPT([1-5])$/, "JLPT N$1");
 }
 
@@ -329,7 +492,7 @@ function renderGrade(result) {
   scoreText.textContent = `${normalizeScore(result.score)} / 10`;
   feedbackText.textContent = result.feedback || "";
   bunproSentenceText.textContent = currentSentence?.japanese
-    ? `Bunpro sentence: ${currentSentence.japanese}`
+    ? `${currentSentence.source === "anki" ? "Anki sentence" : "Bunpro sentence"}: ${currentSentence.japanese}`
     : "";
   correctionText.textContent = result.correctedJapanese
     ? `Natural answer: ${result.correctedJapanese}`
@@ -556,9 +719,25 @@ function formatSyncTime(isoTimestamp) {
 function setBusy(isBusy, message) {
   busy = isBusy;
   syncButton.disabled = isBusy;
+  setAnkiControlsDisabled(isBusy || ankiBusy);
   updateNavigationState();
   if (message) statusText.textContent = message;
   if (!isBusy && !message) restoreStatusText();
+}
+
+function setAnkiBusy(isBusy, message) {
+  ankiBusy = isBusy;
+  setAnkiControlsDisabled(isBusy || busy);
+  if (message) ankiStatus.textContent = message;
+}
+
+function setAnkiControlsDisabled(isDisabled) {
+  ankiConnectButton.disabled = isDisabled;
+  ankiDeckSelect.disabled = isDisabled;
+  ankiEnglishFieldSelect.disabled = isDisabled;
+  ankiJapaneseFieldSelect.disabled = isDisabled;
+  ankiPreviewButton.disabled = isDisabled;
+  ankiImportButton.disabled = isDisabled;
 }
 
 function restoreStatusText() {

@@ -25,6 +25,8 @@ You need four things:
 - A Gemini API key for the default free provider
 - Node.js 18 or newer
 
+Anki import is optional. If you want to import sentence cards from Anki, you also need Anki desktop and the AnkiConnect add-on.
+
 You do not need to understand programming to run this app, but you do need to paste a few commands into a command window.
 
 By default, the setup uses Gemini with `gemini-3.5-flash` because Gemini has a free API tier. The grader uses a Chat Completions-compatible endpoint, so advanced users can also point it at OpenAI, another OpenAI-compatible provider, or a local model server if it can return JSON reliably.
@@ -300,6 +302,44 @@ On macOS, this is still Control-C, not Command-C.
 
 If you edit `.env`, stop and restart the app. The app reads `.env` only when it starts.
 
+## Optional: Import Anki Sentence Cards
+
+The app can also read sentence cards from Anki through AnkiConnect. This is useful if you have cards with one field for English and one field for Japanese.
+
+This does not write anything to Anki. It only reads notes, extracts sentence pairs, and stores a local cache in `cache/anki-sync.json`.
+
+### Install AnkiConnect
+
+1. Install Anki desktop from [apps.ankiweb.net](https://apps.ankiweb.net/) if you do not already have it.
+2. Open Anki.
+3. Install the AnkiConnect add-on from [ankiweb.net/shared/info/2055492159](https://ankiweb.net/shared/info/2055492159).
+4. Restart Anki after installing the add-on.
+5. Keep Anki open while importing cards.
+
+The default AnkiConnect address is:
+
+```sh
+ANKI_CONNECT_URL=http://127.0.0.1:8765
+```
+
+This is already the app default. You only need to put it in `.env` if you changed your AnkiConnect settings.
+
+### Import From Anki
+
+1. Start the trainer with `npm start`.
+2. Open `http://127.0.0.1:5174`.
+3. Open **Anki import**.
+4. Click **Connect Anki**.
+5. Choose your deck.
+6. Choose the field that contains the English sentence.
+7. Choose the field that contains the Japanese sentence.
+8. Click **Preview** to check the first imported sentence pairs.
+9. Click **Import**.
+
+Imported Anki sentences appear in the normal practice flow alongside Bunpro sentences. In the practice filters, Anki cards appear as **Anki**.
+
+If your Anki cards have HTML, audio tags, or cloze markers, the app tries to clean those out before training.
+
 ## How Sync Works
 
 When you click **Sync Bunpro**, the app:
@@ -315,6 +355,7 @@ The cache is ignored by Git and can be safely deleted. Sync again to rebuild it.
 ## Features
 
 - Syncs studied Bunpro grammar points
+- Imports sentence cards from Anki through AnkiConnect
 - Pulls example sentences for known grammar
 - Filters practice by available JLPT levels
 - Grades answers with an LLM through a Chat Completions-compatible API
@@ -385,6 +426,21 @@ If you changed the local port during setup, use that port number instead of `517
 
 The Bunpro frontend API is unofficial. The endpoint names, token behavior, or response shapes may change.
 
+### Anki import cannot connect
+
+Check that:
+
+- Anki desktop is open
+- AnkiConnect is installed
+- Anki was restarted after installing AnkiConnect
+- `.env` has the correct `ANKI_CONNECT_URL` if you changed the default AnkiConnect port
+
+The default is:
+
+```sh
+ANKI_CONNECT_URL=http://127.0.0.1:8765
+```
+
 ## Privacy
 
 This app runs locally on your computer. Bunpro and LLM requests are made by the local Node server, not directly by browser JavaScript.
@@ -395,6 +451,7 @@ Do not share:
 - your Bunpro token
 - your LLM or OpenAI API key
 - `cache/bunpro-sync.json`, if you consider your studied grammar data private
+- `cache/anki-sync.json`, if you consider your imported Anki sentences private
 
 ## Manual `.env` Setup
 
@@ -412,6 +469,7 @@ LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 LLM_API_KEY=your_gemini_api_key_here
 LLM_MODEL=gemini-3.5-flash
 PORT=5174
+ANKI_CONNECT_URL=http://127.0.0.1:8765
 ```
 
 OpenAI example:
@@ -422,6 +480,7 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_KEY=your_openai_api_key_here
 LLM_MODEL=gpt-5.4-mini
 PORT=5174
+ANKI_CONNECT_URL=http://127.0.0.1:8765
 ```
 
 Older `.env` files that use `OPENAI_API_KEY`, `OPENAI_MODEL`, or `OPENAI_BASE_URL` still work, but new setups should use the `LLM_*` names.

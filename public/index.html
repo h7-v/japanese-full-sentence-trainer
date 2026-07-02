@@ -33,7 +33,7 @@
             <span id="retryStatus" aria-live="polite">No retries waiting</span>
           </div>
           <fieldset id="jlptFilter" class="jlpt-filter hidden">
-            <legend>JLPT levels</legend>
+            <legend>Practice filters</legend>
             <div id="jlptFilterOptions" class="jlpt-options"></div>
           </fieldset>
           <div id="grammarHint" class="grammar-hint hidden">
@@ -47,6 +47,30 @@
           <details>
             <summary>Reference</summary>
             <p id="referenceJapanese"></p>
+          </details>
+          <details id="ankiPanel" class="anki-panel">
+            <summary>Anki import</summary>
+            <div class="anki-controls">
+              <button id="ankiConnectButton" class="secondary" type="button">Connect Anki</button>
+              <label class="anki-field hidden" for="ankiDeckSelect">
+                Deck
+                <select id="ankiDeckSelect"></select>
+              </label>
+              <label class="anki-field hidden" for="ankiEnglishFieldSelect">
+                English field
+                <select id="ankiEnglishFieldSelect"></select>
+              </label>
+              <label class="anki-field hidden" for="ankiJapaneseFieldSelect">
+                Japanese field
+                <select id="ankiJapaneseFieldSelect"></select>
+              </label>
+              <div class="anki-actions">
+                <button id="ankiPreviewButton" class="secondary hidden" type="button">Preview</button>
+                <button id="ankiImportButton" class="hidden" type="button">Import</button>
+              </div>
+              <p id="ankiStatus" aria-live="polite"></p>
+              <div id="ankiPreview" class="anki-preview hidden"></div>
+            </div>
           </details>
         </div>
 
