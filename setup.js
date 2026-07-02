@@ -31,14 +31,16 @@ async function main() {
   }
 
   const bunproToken = await ask("Bunpro API token: ");
-  const openaiKey = await ask("OpenAI API key: ");
-  const modelAnswer = await ask("OpenAI model [gpt-5.4-mini] (press Enter for default setting): ");
+  const llmBaseUrl = await ask("LLM base URL [https://generativelanguage.googleapis.com/v1beta/openai] (press Enter for default setting): ");
+  const llmKey = await ask("LLM API key (paste your Gemini key; OpenAI/local providers also work): ");
+  const modelAnswer = await ask("LLM model [gemini-3.5-flash] (press Enter for default setting): ");
   const portAnswer = await ask("Local port [5174] (press Enter for default setting): ");
 
   const lines = [
     `BUNPRO_API_TOKEN=${bunproToken}`,
-    `OPENAI_API_KEY=${openaiKey}`,
-    `OPENAI_MODEL=${modelAnswer || "gpt-5.4-mini"}`,
+    `LLM_BASE_URL=${llmBaseUrl || "https://generativelanguage.googleapis.com/v1beta/openai"}`,
+    `LLM_API_KEY=${llmKey}`,
+    `LLM_MODEL=${modelAnswer || "gemini-3.5-flash"}`,
     `PORT=${portAnswer || "5174"}`
   ];
 

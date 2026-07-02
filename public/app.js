@@ -200,14 +200,14 @@ async function gradeAnswer(event) {
 
 function renderStatus(status) {
   const tokenStatus = status.hasBunproToken === false ? "Bunpro token missing" : "Bunpro ready";
-  const openaiStatus = status.hasOpenAiKey === false ? "OpenAI key missing" : `Grading with ${status.model || "configured model"}`;
+  const llmStatus = status.hasLlmCredentials === false ? "LLM key missing" : `Grading with ${status.model || "configured model"}`;
   const counts = status.sentenceCount
     ? `${status.grammarPointCount} grammar points, ${status.sentenceCount} sentences`
     : "Not synced";
   const lastSync = status.syncedAt
     ? `Last sync ${formatSyncTime(status.syncedAt)}`
     : "No local sync cache yet";
-  lastStatusText = `${tokenStatus}. ${openaiStatus}. ${counts}. ${lastSync}.`;
+  lastStatusText = `${tokenStatus}. ${llmStatus}. ${counts}. ${lastSync}.`;
   restoreStatusText();
 }
 

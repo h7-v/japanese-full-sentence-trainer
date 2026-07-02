@@ -2,7 +2,7 @@
 
 A local practice app for Bunpro grammar sentences.
 
-It syncs grammar points you have studied in Bunpro, shows you an English sentence, asks you to type the Japanese, and uses an OpenAI model to grade whether your answer is good enough. Missed answers can be retried in the same session.
+It syncs grammar points you have studied in Bunpro, shows you an English sentence, asks you to type the Japanese, and uses an LLM to grade whether your answer is good enough. Missed answers can be retried in the same session.
 
 This is an unofficial Bunpro API experiment. Bunpro can change their frontend API at any time.
 
@@ -22,12 +22,14 @@ You need four things:
 
 - A Bunpro account
 - A Bunpro API token
-- An OpenAI API key
+- A Gemini API key for the default free provider
 - Node.js 18 or newer
 
 You do not need to understand programming to run this app, but you do need to paste a few commands into a command window.
 
-Important: ChatGPT Plus/Pro and OpenAI API billing are separate. A ChatGPT subscription does not pay for this app's OpenAI grading. If grading fails with a quota error, you probably need to add API credit in the OpenAI developer billing page. Adding about 5 USD should be enough for roughly 2,000 graded questions, depending on model prices and answer length.
+By default, the setup uses Gemini with `gemini-3.5-flash` because Gemini has a free API tier. The grader uses a Chat Completions-compatible endpoint, so advanced users can also point it at OpenAI, another OpenAI-compatible provider, or a local model server if it can return JSON reliably.
+
+Important: ChatGPT Plus/Pro and OpenAI API billing are separate. A ChatGPT subscription does not pay for OpenAI API grading. If you choose OpenAI and grading fails with a quota error, you probably need to add API credit in the OpenAI developer billing page.
 
 ## What Is A Terminal?
 
@@ -170,7 +172,54 @@ abc123
 
 Important: Bunpro warns that this token can give third-party apps read and write access to your Bunpro data. This app only uses read-oriented endpoints, but you should still treat the token like a password.
 
-## Get An OpenAI API Key
+## Choose An LLM Provider
+
+The app grades answers through an OpenAI-compatible Chat Completions endpoint.
+
+Most users should use the default Gemini setup:
+
+```sh
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+LLM_API_KEY=your_gemini_api_key_here
+LLM_MODEL=gemini-3.5-flash
+```
+
+To use OpenAI instead:
+
+```sh
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=your_openai_api_key_here
+LLM_MODEL=gpt-5.4-mini
+```
+
+You can also try a local provider if it exposes an OpenAI-compatible API, for example:
+
+```sh
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=dummy
+LLM_MODEL=your_local_model_name
+```
+
+Local model quality varies. For this app, the model needs to understand English and Japanese, follow grading instructions, and return valid JSON.
+
+## Get A Gemini API Key
+
+Gemini is the recommended default because it has a free API tier. Skip this section only if you are using OpenAI or a local provider instead.
+
+1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+2. Sign in.
+3. Create a Gemini API key. One should be created for you and listed as the "Default Gemini API Key".
+4. Click the key link (e.g.: ...sl2Q). Copy the full API key somewhere temporary so you can paste it during setup.
+
+## Using OpenAI Instead
+
+If you prefer OpenAI, use these values during setup or in `.env`:
+
+```sh
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=your_openai_api_key_here
+LLM_MODEL=gpt-5.4-mini
+```
 
 1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
 2. Sign in.
@@ -179,7 +228,7 @@ Important: Bunpro warns that this token can give third-party apps read and write
 
 Important: The OpenAI API is billed through the OpenAI developer platform. It is not included with ChatGPT Plus/Pro.
 
-If the app says OpenAI grading failed because of quota:
+If you use OpenAI and the app says grading failed because of quota:
 
 1. Go to the OpenAI developer billing page.
 2. Add a small amount of credit, such as 5 USD.
@@ -200,13 +249,22 @@ Press Enter.
 The setup script asks for:
 
 - Bunpro API token
-- OpenAI API key
-- OpenAI model
+- LLM base URL
+- LLM API key
+- LLM model
 - Local port
 
-For **OpenAI model**, press Enter to use the default setting.
+For the recommended Gemini setup, answer like this:
 
-For **Local port**, press Enter to use the default setting.
+| Setup question | What to enter |
+| --- | --- |
+| Bunpro API token | Paste the Bunpro token you copied earlier |
+| LLM base URL | Press Enter |
+| LLM API key | Paste your Gemini API key from `https://aistudio.google.com/apikey` |
+| LLM model | Press Enter |
+| Local port | Press Enter |
+
+Pressing Enter for the LLM base URL, model, and port uses the default Gemini settings.
 
 The setup script writes a local `.env` file. Do not share that file. It contains your private tokens.
 
@@ -259,7 +317,7 @@ The cache is ignored by Git and can be safely deleted. Sync again to rebuild it.
 - Syncs studied Bunpro grammar points
 - Pulls example sentences for known grammar
 - Filters practice by available JLPT levels
-- Grades answers with an OpenAI model
+- Grades answers with an LLM through a Chat Completions-compatible API
 - Accepts natural answers, not just exact Bunpro wording
 - Uses model-provided accepted answer variants (Kana vs Kanji) for the no-API drill step
 - Keeps a session history with Previous/Next
@@ -288,7 +346,7 @@ npm run setup
 
 Then paste your Bunpro token when asked.
 
-### The page says the OpenAI key is missing
+### The page says the LLM key is missing
 
 Run this again:
 
@@ -296,7 +354,16 @@ Run this again:
 npm run setup
 ```
 
-Then paste your OpenAI API key when asked.
+Then paste your LLM API key when asked. If you are using a local provider that does not require a key, make sure `LLM_BASE_URL` points to a local address such as `http://localhost:11434/v1`.
+
+### Gemini grading failed
+
+Check that:
+
+- your `.env` file has `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai`
+- your `.env` file has `LLM_MODEL=gemini-3.5-flash`
+- your `LLM_API_KEY` value is a Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- you stopped and restarted the app after editing `.env`
 
 ### OpenAI grading failed because of quota
 
@@ -320,13 +387,13 @@ The Bunpro frontend API is unofficial. The endpoint names, token behavior, or re
 
 ## Privacy
 
-This app runs locally on your computer. Bunpro and OpenAI requests are made by the local Node server, not directly by browser JavaScript.
+This app runs locally on your computer. Bunpro and LLM requests are made by the local Node server, not directly by browser JavaScript.
 
 Do not share:
 
 - `.env`
 - your Bunpro token
-- your OpenAI API key
+- your LLM or OpenAI API key
 - `cache/bunpro-sync.json`, if you consider your studied grammar data private
 
 ## Manual `.env` Setup
@@ -341,7 +408,20 @@ Advanced users can create `.env` manually:
 
 ```sh
 BUNPRO_API_TOKEN=your_bunpro_token_here
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-5.4-mini
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+LLM_API_KEY=your_gemini_api_key_here
+LLM_MODEL=gemini-3.5-flash
 PORT=5174
 ```
+
+OpenAI example:
+
+```sh
+BUNPRO_API_TOKEN=your_bunpro_token_here
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=your_openai_api_key_here
+LLM_MODEL=gpt-5.4-mini
+PORT=5174
+```
+
+Older `.env` files that use `OPENAI_API_KEY`, `OPENAI_MODEL`, or `OPENAI_BASE_URL` still work, but new setups should use the `LLM_*` names.

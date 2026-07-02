@@ -16,7 +16,7 @@ cd bunpro-full-sentence-trainer
 npm run setup
 ```
 
-This writes `.env`. Do not commit `.env` to GitHub.
+This writes `.env`. Use the Gemini defaults unless you know you want another provider. Do not commit `.env` to GitHub.
 
 ## Start The Server
 
@@ -68,7 +68,7 @@ You want to see:
 ```json
 {
   "hasBunproToken": true,
-  "hasOpenAiKey": true
+  "hasLlmCredentials": true
 }
 ```
 
@@ -90,9 +90,9 @@ curl -L -s http://127.0.0.1:5174/api/sentences
 curl -L -s http://127.0.0.1:5174/api/random
 ```
 
-## Check OpenAI API Key
+## Check LLM API Key
 
-This reads `OPENAI_API_KEY` from `.env` and does not print the key.
+This reads `LLM_BASE_URL` and `LLM_API_KEY` from `.env` and does not print the key.
 
 ```sh
 node -e '
@@ -107,9 +107,11 @@ const env = Object.fromEntries(
     })
 );
 
-fetch("https://api.openai.com/v1/models", {
-  headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` }
-}).then(r => console.log({ status: r.status, ok: r.ok }));
+const baseUrl = (env.LLM_BASE_URL || env.OPENAI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai").replace(/\/+$/, "");
+const apiKey = env.LLM_API_KEY || env.OPENAI_API_KEY || "";
+const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+
+fetch(`${baseUrl}/models`, { headers }).then(r => console.log({ status: r.status, ok: r.ok }));
 '
 ```
 
@@ -123,12 +125,23 @@ Expected result:
 
 Do not put real keys in this markdown file. Put them in `.env`.
 
-Example:
+Default Gemini example:
 
 ```sh
 BUNPRO_API_TOKEN=your_bunpro_token
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-5.4-mini
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+LLM_API_KEY=your_gemini_api_key
+LLM_MODEL=gemini-3.5-flash
+PORT=5174
+```
+
+OpenAI example:
+
+```sh
+BUNPRO_API_TOKEN=your_bunpro_token
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=your_openai_api_key
+LLM_MODEL=gpt-5.4-mini
 PORT=5174
 ```
 
@@ -161,7 +174,7 @@ curl -L -s http://127.0.0.1:5174/api/sentences
 # Random prompt:
 curl -L -s http://127.0.0.1:5174/api/random
 
-# OpenAI key check:
+# LLM key check:
 node -e '
 const fs = require("fs");
 const env = Object.fromEntries(
@@ -174,7 +187,9 @@ const env = Object.fromEntries(
     })
 );
 
-fetch("https://api.openai.com/v1/models", {
-  headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` }
-}).then(r =&gt; console.log({ status: r.status, ok: r.ok }));
+const baseUrl = (env.LLM_BASE_URL || env.OPENAI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai").replace(/\/+$/, "");
+const apiKey = env.LLM_API_KEY || env.OPENAI_API_KEY || "";
+const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+
+fetch(`${baseUrl}/models`, { headers }).then(r =&gt; console.log({ status: r.status, ok: r.ok }));
 '</code></pre>

@@ -8,6 +8,8 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 const CACHE_DIR = path.join(ROOT, "cache");
 const SYNC_CACHE_FILE = path.join(CACHE_DIR, "bunpro-sync.json");
 const BUNPRO_BASE_URL = "https://api.bunpro.jp/api/frontend";
+const DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
+const DEFAULT_LLM_MODEL = "gemini-3.5-flash";
 const SRS_LEVELS = ["beginner", "adept", "seasoned", "expert", "master"];
 
 loadEnv(path.join(ROOT, ".env"));
@@ -16,8 +18,9 @@ const config = {
   port: Number(process.env.PORT || 5174),
   host: process.env.HOST || "127.0.0.1",
   bunproToken: process.env.BUNPRO_API_TOKEN || "",
-  openaiKey: process.env.OPENAI_API_KEY || "",
-  openaiModel: process.env.OPENAI_MODEL || "gpt-5.4-mini"
+  llmBaseUrl: stripTrailingSlash(process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL || DEFAULT_LLM_BASE_URL),
+  llmApiKey: process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || "",
+  llmModel: process.env.LLM_MODEL || process.env.OPENAI_MODEL || DEFAULT_LLM_MODEL
 };
 
 const state = {
@@ -39,8 +42,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/status") {
       return sendJson(res, 200, {
         hasBunproToken: Boolean(config.bunproToken),
-        hasOpenAiKey: Boolean(config.openaiKey),
-        model: config.openaiModel,
+        hasOpenAiKey: hasLlmCredentials(),
+        hasLlmCredentials: hasLlmCredentials(),
+        model: config.llmModel,
+        llmBaseUrl: config.llmBaseUrl,
         syncedAt: state.syncedAt,
         syncedAtDisplay: state.syncedAtDisplay,
         grammarPointCount: state.grammarPoints.length,
@@ -236,10 +241,10 @@ function reconstructJapanese(content, answer) {
 }
 
 async function gradeAnswer(body) {
-  if (!config.openaiKey) {
-    const err = new Error("OpenAI API key is not configured.");
+  if (!hasLlmCredentials()) {
+    const err = new Error("LLM API key is not configured.");
     err.statusCode = 400;
-    err.publicMessage = "Set OPENAI_API_KEY in .env before grading.";
+    err.publicMessage = "Set LLM_API_KEY in .env before grading, or use a local LLM_BASE_URL that does not require a key.";
     throw err;
   }
 
@@ -285,68 +290,154 @@ async function gradeAnswer(body) {
     }
   };
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch(buildLlmUrl("/chat/completions"), {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.openaiKey}`,
-      "Content-Type": "application/json"
-    },
+    headers: createLlmHeaders(),
     body: JSON.stringify({
-      model: config.openaiModel,
-      input: [
+      model: config.llmModel,
+      messages: [
         {
           role: "system",
-          content: "You are a careful Japanese grammar tutor. Reply only as valid JSON."
+          content: "You are a careful Japanese grammar tutor. Reply only with one valid JSON object. Do not wrap it in Markdown."
         },
         {
           role: "user",
-          content: JSON.stringify(prompt)
+          content: JSON.stringify(prompt, null, 2)
         }
       ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "grading_result",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["verdict", "score", "feedback", "correctedJapanese", "acceptedJapaneseAnswers", "notes"],
-            properties: {
-              verdict: { type: "string", enum: ["correct", "close", "incorrect"] },
-              score: { type: "integer", minimum: 0, maximum: 10 },
-              feedback: { type: "string" },
-              correctedJapanese: { type: "string" },
-              acceptedJapaneseAnswers: {
-                type: "array",
-                minItems: 1,
-                maxItems: 12,
-                items: { type: "string" }
-              },
-              notes: { type: "string" }
-            }
-          }
-        }
-      }
+      temperature: 0.2
     })
   });
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const err = new Error("OpenAI grading failed.");
+    const err = new Error("LLM grading failed.");
     err.statusCode = response.status;
-    err.publicMessage = "OpenAI grading failed.";
+    err.publicMessage = "LLM grading failed.";
     err.publicDetail = payload.error?.message || response.statusText;
     throw err;
   }
 
-  const text = payload.output_text || payload.output?.[0]?.content?.[0]?.text || "{}";
-  const result = JSON.parse(text);
+  const text = getChatCompletionText(payload);
+  const result = normalizeGradingResult(parseJsonObject(text));
   result.acceptedJapaneseAnswers = uniqueNonEmptyStrings([
     ...(Array.isArray(result.acceptedJapaneseAnswers) ? result.acceptedJapaneseAnswers : []),
     sentence.japanese,
     result.correctedJapanese
   ]);
   return result;
+}
+
+function hasLlmCredentials() {
+  return Boolean(config.llmApiKey) || isLocalLlmBaseUrl(config.llmBaseUrl);
+}
+
+function createLlmHeaders() {
+  const headers = {
+    "Content-Type": "application/json"
+  };
+  if (config.llmApiKey) {
+    headers.Authorization = `Bearer ${config.llmApiKey}`;
+  }
+  return headers;
+}
+
+function buildLlmUrl(pathname) {
+  return `${config.llmBaseUrl}${pathname}`;
+}
+
+function isLocalLlmBaseUrl(baseUrl) {
+  try {
+    const url = new URL(baseUrl);
+    return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function stripTrailingSlash(value) {
+  return String(value || "").replace(/\/+$/, "");
+}
+
+function getChatCompletionText(payload) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => part?.text || part?.content || "")
+      .join("")
+      .trim();
+  }
+  return "";
+}
+
+function parseJsonObject(text) {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    throwInvalidLlmJson("The model returned an empty response.");
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced) {
+      try {
+        return JSON.parse(fenced[1].trim());
+      } catch {
+        // Fall through to object extraction.
+      }
+    }
+
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(raw.slice(start, end + 1));
+      } catch {
+        // Fall through to public error.
+      }
+    }
+  }
+
+  throwInvalidLlmJson("The model did not return valid grading JSON.");
+}
+
+function throwInvalidLlmJson(detail) {
+  const err = new Error(detail);
+  err.statusCode = 502;
+  err.publicMessage = "LLM grading failed.";
+  err.publicDetail = `${detail} Try a stronger model or a model that follows JSON instructions reliably.`;
+  throw err;
+}
+
+function normalizeGradingResult(result) {
+  const score = clampScore(result?.score);
+  const verdict = normalizeVerdict(result?.verdict, score);
+  return {
+    verdict,
+    score,
+    feedback: String(result?.feedback || ""),
+    correctedJapanese: String(result?.correctedJapanese || ""),
+    acceptedJapaneseAnswers: Array.isArray(result?.acceptedJapaneseAnswers)
+      ? result.acceptedJapaneseAnswers
+      : [],
+    notes: String(result?.notes || "")
+  };
+}
+
+function clampScore(score) {
+  const numericScore = Number(score);
+  if (!Number.isFinite(numericScore)) return 0;
+  return Math.max(0, Math.min(10, Math.round(numericScore)));
+}
+
+function normalizeVerdict(verdict, score) {
+  const value = String(verdict || "").trim().toLowerCase();
+  if (["correct", "close", "incorrect"].includes(value)) return value;
+  if (score >= 9) return "correct";
+  if (score >= 7) return "close";
+  return "incorrect";
 }
 
 async function bunproGet(pathname, options = {}) {
