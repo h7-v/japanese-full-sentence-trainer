@@ -28,6 +28,10 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: 120%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -42,12 +46,12 @@ textarea {
 }
 
 button {
-  min-height: 40px;
+  min-height: 46px;
   border: 1px solid var(--accent);
   border-radius: 6px;
   background: var(--accent);
   color: white;
-  padding: 0 16px;
+  padding: 0 19px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -72,8 +76,8 @@ button:disabled {
 }
 
 .app-shell {
-  width: min(1040px, calc(100vw - 32px));
-  margin: 32px auto;
+  width: min(1400px, calc(100vw - 32px));
+  margin: 20px auto 16px;
 }
 
 .topbar {
@@ -81,17 +85,19 @@ button:disabled {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .topbar h1 {
-  margin: 0 0 6px;
-  font-size: clamp(1.55rem, 3vw, 2.2rem);
+  margin: 0 0 4px;
+  font-size: clamp(1.45rem, 2.6vw, 2rem);
+  line-height: 1.08;
 }
 
 .topbar p {
   margin: 0;
   color: var(--muted);
+  line-height: 1.35;
 }
 
 .topbar-actions,
@@ -103,7 +109,7 @@ button:disabled {
 
 .trainer {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .prompt-panel,
@@ -112,7 +118,7 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
-  padding: 18px;
+  padding: 16px;
 }
 
 .hint-toggle {
@@ -126,8 +132,8 @@ button:disabled {
 }
 
 .hint-toggle input {
-  width: 16px;
-  height: 16px;
+  width: 19px;
+  height: 19px;
   accent-color: var(--accent);
 }
 
@@ -136,7 +142,7 @@ button:disabled {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  margin-top: 12px;
+  margin-top: 10px;
   color: var(--muted);
   font-weight: 700;
 }
@@ -148,8 +154,8 @@ button:disabled {
 }
 
 .retry-setting input {
-  width: 64px;
-  min-height: 36px;
+  width: 77px;
+  min-height: 41px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: transparent;
@@ -165,7 +171,7 @@ button:disabled {
 .jlpt-filter {
   display: grid;
   gap: 8px;
-  margin: 14px 0 0;
+  margin: 12px 0 0;
   border: 0;
   padding: 0;
   color: var(--muted);
@@ -187,7 +193,7 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
+  min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0 10px;
@@ -198,16 +204,16 @@ button:disabled {
 }
 
 .jlpt-option input {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   accent-color: var(--accent);
 }
 
 .retry-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  margin-top: 16px;
+  min-height: 34px;
+  margin-top: 12px;
   border-radius: 999px;
   background: var(--warn);
   color: white;
@@ -216,7 +222,7 @@ button:disabled {
 }
 
 .grammar-hint {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .meta-row {
@@ -229,7 +235,7 @@ button:disabled {
 }
 
 .meta-row span {
-  min-height: 28px;
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--line);
@@ -238,17 +244,18 @@ button:disabled {
 }
 
 .meaning {
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   color: var(--muted);
 }
 
 h2 {
-  margin: 18px 0;
-  font-size: clamp(1.35rem, 4vw, 2.2rem);
+  margin: 0 0 16px;
+  font-size: clamp(1.35rem, 3vw, 2.15rem);
   line-height: 1.25;
 }
 
 details {
+  margin-top: 18px;
   color: var(--muted);
 }
 
@@ -266,25 +273,29 @@ summary {
 
 .answer-panel label {
   display: block;
-  margin-bottom: 8px;
   font-weight: 800;
 }
 
 #answerInput {
   width: 100%;
-  min-height: 44px;
+  min-height: 67px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: transparent;
   color: var(--text);
-  padding: 0 12px;
+  padding: 0 14px;
   line-height: 1.3;
-  font-size: 1.1rem;
+  font-size: 1.45rem;
 }
 
 .answer-actions {
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+#gradeButton {
+  min-height: 67px;
+  padding: 0 26px;
 }
 
 .result-heading {
@@ -316,7 +327,7 @@ summary {
 #feedbackText,
 #bunproSentenceText,
 #correctionText {
-  margin-bottom: 0;
+  margin: 10px 0 0;
   line-height: 1.6;
 }
 
@@ -325,14 +336,14 @@ summary {
 }
 
 .drill-panel {
-  margin-top: 18px;
+  margin-top: 14px;
   border-top: 1px solid var(--line);
-  padding-top: 16px;
+  padding-top: 14px;
 }
 
 .drill-panel label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-weight: 800;
 }
 
@@ -343,7 +354,7 @@ summary {
 }
 
 .drill-row input {
-  min-height: 40px;
+  min-height: 48px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: transparent;
@@ -353,7 +364,7 @@ summary {
 }
 
 #drillFeedback {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   font-weight: 700;
 }
 
@@ -381,6 +392,54 @@ summary {
 
 .hidden {
   display: none;
+}
+
+@media (min-width: 900px) {
+  .trainer {
+    grid-template-columns: minmax(360px, 0.85fr) minmax(520px, 1.15fr);
+    grid-template-areas:
+      "prompt answer"
+      ". result"
+      "nav nav";
+    align-items: stretch;
+  }
+
+  .prompt-panel {
+    grid-area: prompt;
+  }
+
+  .answer-panel {
+    grid-area: answer;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    align-items: end;
+  }
+
+  .answer-panel label {
+    grid-column: 1 / -1;
+  }
+
+  .answer-panel h2 {
+    grid-column: 1 / -1;
+  }
+
+  #answerInput {
+    min-height: 67px;
+  }
+
+  .answer-actions {
+    align-self: end;
+    margin-top: 0;
+  }
+
+  .result-panel {
+    grid-area: result;
+  }
+
+  .session-nav {
+    grid-area: nav;
+  }
 }
 
 @media (max-width: 720px) {
