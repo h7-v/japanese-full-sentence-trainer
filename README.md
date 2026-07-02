@@ -6,6 +6,16 @@ It syncs grammar points you have studied in Bunpro, shows you an English sentenc
 
 This is an unofficial Bunpro API experiment. Bunpro can change their frontend API at any time.
 
+## Screenshots
+
+![Practice prompt](docs/images/01.png)
+
+![Correct answer feedback](docs/images/02.png)
+
+![Incorrect answer with retry drill](docs/images/03.png)
+
+![Grammar hints and grading feedback](docs/images/04.png)
+
 ## Before You Start
 
 You need four things:
