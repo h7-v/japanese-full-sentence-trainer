@@ -11,13 +11,14 @@ const grammarHint = document.querySelector("#grammarHint");
 const jlptLevel = document.querySelector("#jlptLevel");
 const grammarTitle = document.querySelector("#grammarTitle");
 const grammarMeaning = document.querySelector("#grammarMeaning");
+const sourceContext = document.querySelector("#sourceContext");
 const englishPrompt = document.querySelector("#englishPrompt");
 const referenceJapanese = document.querySelector("#referenceJapanese");
 const resultPanel = document.querySelector("#resultPanel");
 const verdictPill = document.querySelector("#verdictPill");
 const scoreText = document.querySelector("#scoreText");
 const feedbackText = document.querySelector("#feedbackText");
-const bunproSentenceText = document.querySelector("#bunproSentenceText");
+const referenceSentenceText = document.querySelector("#referenceSentenceText");
 const correctionText = document.querySelector("#correctionText");
 const drillForm = document.querySelector("#drillForm");
 const drillInput = document.querySelector("#drillInput");
@@ -27,10 +28,22 @@ const retryStatus = document.querySelector("#retryStatus");
 const retryBadge = document.querySelector("#retryBadge");
 const jlptFilter = document.querySelector("#jlptFilter");
 const jlptFilterOptions = document.querySelector("#jlptFilterOptions");
+const importStatusPanel = document.querySelector("#importStatusPanel");
+const bunproSettingsForm = document.querySelector("#bunproSettingsForm");
+const bunproTokenInput = document.querySelector("#bunproTokenInput");
+const saveBunproTokenButton = document.querySelector("#saveBunproTokenButton");
+const bunproSettingsStatus = document.querySelector("#bunproSettingsStatus");
+const llmSettingsForm = document.querySelector("#llmSettingsForm");
+const llmBaseUrlInput = document.querySelector("#llmBaseUrlInput");
+const llmApiKeyInput = document.querySelector("#llmApiKeyInput");
+const llmModelInput = document.querySelector("#llmModelInput");
+const saveLlmSettingsButton = document.querySelector("#saveLlmSettingsButton");
+const llmSettingsStatus = document.querySelector("#llmSettingsStatus");
 const ankiConnectButton = document.querySelector("#ankiConnectButton");
 const ankiDeckSelect = document.querySelector("#ankiDeckSelect");
 const ankiEnglishFieldSelect = document.querySelector("#ankiEnglishFieldSelect");
 const ankiJapaneseFieldSelect = document.querySelector("#ankiJapaneseFieldSelect");
+const ankiGrammarHintFieldSelect = document.querySelector("#ankiGrammarHintFieldSelect");
 const ankiPreviewButton = document.querySelector("#ankiPreviewButton");
 const ankiImportButton = document.querySelector("#ankiImportButton");
 const ankiStatus = document.querySelector("#ankiStatus");
@@ -45,8 +58,8 @@ let sessionIndex = -1;
 let nextSessionEntryId = 1;
 let retryQueue = [];
 let sentencePool = [];
-let availableJlptLevels = [];
-let selectedJlptLevels = new Set();
+let availablePracticeFilters = [];
+let selectedPracticeFilters = new Set();
 let busy = false;
 let ankiBusy = false;
 
@@ -61,6 +74,8 @@ answerInput.addEventListener("input", saveCurrentDraft);
 drillInput.addEventListener("input", saveCurrentDraft);
 retryDelayInput.addEventListener("change", updateRetryDelayPreference);
 jlptFilterOptions.addEventListener("change", updateJlptFilterPreference);
+bunproSettingsForm.addEventListener("submit", saveBunproSettings);
+llmSettingsForm.addEventListener("submit", saveLlmSettings);
 ankiConnectButton.addEventListener("click", loadAnkiDecks);
 ankiDeckSelect.addEventListener("change", loadAnkiFields);
 ankiPreviewButton.addEventListener("click", previewAnkiImport);
@@ -75,6 +90,7 @@ async function boot() {
     initializeRetryDelayPreference();
     const status = await api("/api/status");
     renderStatus(status);
+    updateSettingsPlaceholders(status);
     if (status.sentenceCount > 0) {
       await loadSentencePool();
       await showNextSentence();
@@ -87,10 +103,12 @@ async function boot() {
 }
 
 async function syncBunpro() {
-  setBusy(true, "Syncing grammar points and sentences...");
+  setBusy(true, "Importing Bunpro grammar points and sentences...");
   try {
-    const result = await api("/api/sync", { method: "POST" });
-    renderStatus(result);
+    await api("/api/sync", { method: "POST" });
+    const status = await api("/api/status");
+    renderStatus(status);
+    updateSettingsPlaceholders(status);
     await loadSentencePool({ resetLevels: true });
     resetSessionHistory();
     await showNextSentence();
@@ -135,12 +153,12 @@ async function showNextSentence() {
   }
 
   const filteredSentences = getFilteredSentences();
-  if (selectedJlptLevels.size === 0) {
-    statusText.textContent = "Select at least one JLPT level.";
+  if (selectedPracticeFilters.size === 0) {
+    statusText.textContent = "Select at least one practice filter.";
     return;
   }
   if (filteredSentences.length === 0) {
-    statusText.textContent = "No sentences match the selected JLPT levels.";
+    statusText.textContent = "No sentences match the selected practice filters.";
     return;
   }
 
@@ -213,22 +231,128 @@ async function gradeAnswer(event) {
 }
 
 function renderStatus(status) {
-  const tokenStatus = status.hasBunproToken === false ? "Bunpro token missing" : "Bunpro ready";
   const llmStatus = status.hasLlmCredentials === false ? "LLM key missing" : `Grading with ${status.model || "configured model"}`;
-  const sourceCounts = [];
-  if (status.bunproSentenceCount) sourceCounts.push(`${status.bunproSentenceCount} Bunpro`);
-  if (status.ankiSentenceCount) sourceCounts.push(`${status.ankiSentenceCount} Anki`);
-  const counts = status.sentenceCount
-    ? `${status.grammarPointCount || 0} grammar points, ${status.sentenceCount} sentences${sourceCounts.length ? ` (${sourceCounts.join(", ")})` : ""}`
-    : "Not synced";
-  const syncTimes = [];
-  if (status.syncedAt) syncTimes.push(`Bunpro ${formatSyncTime(status.syncedAt)}`);
-  if (status.ankiSyncedAt) syncTimes.push(`Anki ${formatSyncTime(status.ankiSyncedAt)}`);
-  const lastSync = syncTimes.length
-    ? `Last sync ${syncTimes.join(", ")}`
-    : "No local sync cache yet";
-  lastStatusText = `${tokenStatus}. ${llmStatus}. ${counts}. ${lastSync}.`;
+  const sourceParts = [];
+  const totalSentences = Number(status.sentenceCount || 0);
+  if (status.ankiSentenceCount) {
+    sourceParts.push(`Anki ${status.ankiSentenceCount}`);
+  }
+
+  if (status.bunproSentenceCount) {
+    sourceParts.push(`Bunpro ${status.bunproSentenceCount}`);
+  }
+
+  const importStatus = totalSentences
+    ? `${totalSentences} sentences${sourceParts.length ? ` (${sourceParts.join(", ")})` : ""}`
+    : "No imported sentences yet";
+  lastStatusText = `${llmStatus}. ${importStatus}.`;
+  renderImportStatusPanel(status);
   restoreStatusText();
+}
+
+function renderImportStatusPanel(status) {
+  importStatusPanel.textContent = "";
+  const rows = [];
+
+  if (status.ankiSentenceCount) {
+    rows.push({
+      source: "Anki",
+      details: `${status.ankiSentenceCount} sentences`,
+      importedAt: status.ankiSyncedAt ? `Last import ${formatSyncTime(status.ankiSyncedAt)}` : ""
+    });
+  }
+
+  if (status.bunproSentenceCount) {
+    rows.push({
+      source: "Bunpro",
+      details: `${status.bunproSentenceCount} sentences, ${status.grammarPointCount || 0} grammar points`,
+      importedAt: status.syncedAt ? `Last import ${formatSyncTime(status.syncedAt)}` : ""
+    });
+  }
+
+  importStatusPanel.classList.toggle("hidden", rows.length === 0);
+
+  for (const row of rows) {
+    const item = document.createElement("div");
+    item.className = "import-status-row";
+
+    const source = document.createElement("span");
+    source.className = "import-status-source";
+    source.textContent = row.source;
+
+    const detail = document.createElement("span");
+    detail.textContent = row.importedAt
+      ? `${row.details}. ${row.importedAt}.`
+      : row.details;
+
+    item.append(source, detail);
+    importStatusPanel.append(item);
+  }
+}
+
+function updateSettingsPlaceholders(status) {
+  bunproTokenInput.placeholder = status.hasBunproToken ? "Token saved" : "Paste token to save";
+  llmBaseUrlInput.placeholder = status.llmBaseUrl || "https://generativelanguage.googleapis.com/v1beta/openai";
+  llmApiKeyInput.placeholder = status.hasLlmCredentials ? "Key saved" : "Paste key to save";
+  llmModelInput.placeholder = status.model || "gemini-3.5-flash";
+}
+
+async function saveBunproSettings(event) {
+  event.preventDefault();
+  const bunproToken = bunproTokenInput.value.trim();
+  if (!bunproToken) {
+    bunproSettingsStatus.textContent = "Paste a Bunpro token first.";
+    return;
+  }
+
+  setSettingsBusy(true, "Saving Bunpro token...");
+  try {
+    await api("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bunproToken })
+    });
+    bunproSettingsForm.reset();
+    const status = await api("/api/status");
+    renderStatus(status);
+    updateSettingsPlaceholders(status);
+    bunproSettingsStatus.textContent = "Bunpro token saved to .env.";
+  } catch (error) {
+    bunproSettingsStatus.textContent = error.message;
+  } finally {
+    setSettingsBusy(false);
+  }
+}
+
+async function saveLlmSettings(event) {
+  event.preventDefault();
+  const payload = {
+    llmBaseUrl: llmBaseUrlInput.value.trim(),
+    llmApiKey: llmApiKeyInput.value.trim(),
+    llmModel: llmModelInput.value.trim()
+  };
+  if (!payload.llmBaseUrl && !payload.llmApiKey && !payload.llmModel) {
+    llmSettingsStatus.textContent = "Enter at least one LLM setting first.";
+    return;
+  }
+
+  setSettingsBusy(true, "Saving LLM settings...");
+  try {
+    await api("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    llmSettingsForm.reset();
+    const status = await api("/api/status");
+    renderStatus(status);
+    updateSettingsPlaceholders(status);
+    llmSettingsStatus.textContent = "LLM settings saved to .env.";
+  } catch (error) {
+    llmSettingsStatus.textContent = error.message;
+  } finally {
+    setSettingsBusy(false);
+  }
 }
 
 async function loadAnkiDecks() {
@@ -262,8 +386,10 @@ async function loadAnkiFields() {
     const fields = payload.fields || [];
     populateSelect(ankiEnglishFieldSelect, fields);
     populateSelect(ankiJapaneseFieldSelect, fields);
+    populateSelect(ankiGrammarHintFieldSelect, fields, { blankLabel: "No grammar hint" });
     selectLikelyField(ankiEnglishFieldSelect, ["english", "translation", "meaning", "front"]);
     selectLikelyField(ankiJapaneseFieldSelect, ["japanese", "sentence", "expression", "back"]);
+    selectLikelyField(ankiGrammarHintFieldSelect, ["grammar", "hint", "note", "explanation"]);
 
     const hasFields = fields.length > 0;
     ankiFields.slice(1).forEach((field) => field.classList.toggle("hidden", !hasFields));
@@ -291,8 +417,9 @@ async function previewAnkiImport() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(options)
     });
-    renderAnkiPreview(payload.preview || []);
-    ankiStatus.textContent = `${payload.noteCount || 0} notes found. Previewing up to 10 usable sentence pairs.`;
+    renderAnkiPreview(payload);
+    const usableCount = payload.usableSentenceCount || 0;
+    ankiStatus.textContent = `${payload.noteCount || 0} notes found. ${usableCount} usable sentence ${usableCount === 1 ? "pair" : "pairs"} from the first ${payload.checkedNoteCount || 0} checked notes.`;
   } catch (error) {
     ankiStatus.textContent = error.message;
   } finally {
@@ -327,16 +454,18 @@ function getAnkiImportOptions() {
   const deck = ankiDeckSelect.value;
   const englishField = ankiEnglishFieldSelect.value;
   const japaneseField = ankiJapaneseFieldSelect.value;
+  const grammarHintField = ankiGrammarHintFieldSelect.value;
   if (!deck || !englishField || !japaneseField) {
     ankiStatus.textContent = "Choose a deck, English field, and Japanese field first.";
     return null;
   }
-  return { deck, englishField, japaneseField };
+  return { deck, englishField, japaneseField, grammarHintField };
 }
 
-function renderAnkiPreview(sentences) {
+function renderAnkiPreview(payload) {
+  const sentences = Array.isArray(payload) ? payload : payload.preview || [];
   ankiPreview.textContent = "";
-  ankiPreview.classList.toggle("hidden", sentences.length === 0);
+  ankiPreview.classList.remove("hidden");
   for (const sentence of sentences) {
     const row = document.createElement("div");
     row.className = "anki-preview-row";
@@ -351,12 +480,36 @@ function renderAnkiPreview(sentences) {
     ankiPreview.append(row);
   }
   if (sentences.length === 0) {
-    ankiStatus.textContent = "No usable sentence pairs found with those fields.";
+    const diagnostics = document.createElement("div");
+    diagnostics.className = "anki-preview-row";
+
+    const heading = document.createElement("p");
+    heading.textContent = "No usable sentence pairs found with the selected fields.";
+
+    const fieldInfo = document.createElement("p");
+    const selectedFields = payload.selectedFields || {};
+    fieldInfo.textContent = `Selected English: ${selectedFields.englishField || "-"} / Japanese: ${selectedFields.japaneseField || "-"}`;
+
+    diagnostics.append(heading, fieldInfo);
+
+    for (const sample of payload.samples || []) {
+      const sampleText = document.createElement("p");
+      sampleText.textContent = `Sample ${sample.noteId}: EN "${sample.english || "(empty)"}" / JA "${sample.japanese || "(empty)"}"`;
+      diagnostics.append(sampleText);
+    }
+
+    ankiPreview.append(diagnostics);
   }
 }
 
-function populateSelect(select, values) {
+function populateSelect(select, values, options = {}) {
   select.textContent = "";
+  if (options.blankLabel) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = options.blankLabel;
+    select.append(option);
+  }
   for (const value of values) {
     const option = document.createElement("option");
     option.value = value;
@@ -376,32 +529,34 @@ function selectLikelyField(select, candidates) {
 async function loadSentencePool(options = {}) {
   const payload = await api("/api/sentences");
   sentencePool = Array.isArray(payload.sentences) ? payload.sentences : [];
-  availableJlptLevels = normalizeJlptLevels(payload.jlptLevels || collectJlptLevels(sentencePool));
-  renderJlptFilter(availableJlptLevels, options);
+  availablePracticeFilters = normalizePracticeFilters(payload.practiceFilters || collectPracticeFilters(sentencePool));
+  renderJlptFilter(availablePracticeFilters, options);
 }
 
-function renderJlptFilter(levels, options = {}) {
+function renderJlptFilter(filters, options = {}) {
   jlptFilterOptions.textContent = "";
-  const normalizedLevels = normalizeJlptLevels(levels);
-  availableJlptLevels = normalizedLevels;
-  jlptFilter.classList.toggle("hidden", normalizedLevels.length <= 1);
+  const normalizedFilters = normalizePracticeFilters(filters);
+  availablePracticeFilters = normalizedFilters;
+  jlptFilter.classList.toggle("hidden", normalizedFilters.length <= 1);
 
-  const shouldReset = options.resetLevels || selectedJlptLevels.size === 0;
+  const shouldReset = options.resetLevels || selectedPracticeFilters.size === 0;
   const selected = shouldReset
-    ? new Set(normalizedLevels)
-    : new Set(normalizedLevels.filter((level) => selectedJlptLevels.has(level)));
-  selectedJlptLevels = selected.size > 0 ? selected : new Set(normalizedLevels);
+    ? new Set(normalizedFilters.map((filter) => filter.id))
+    : new Set(normalizedFilters.map((filter) => filter.id).filter((id) => selectedPracticeFilters.has(id)));
+  selectedPracticeFilters = selected.size > 0
+    ? selected
+    : new Set(normalizedFilters.map((filter) => filter.id));
 
-  for (const level of normalizedLevels) {
+  for (const filter of normalizedFilters) {
     const label = document.createElement("label");
     label.className = "jlpt-option";
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.value = level;
-    checkbox.checked = selectedJlptLevels.has(level);
+    checkbox.value = filter.id;
+    checkbox.checked = selectedPracticeFilters.has(filter.id);
 
-    label.append(checkbox, formatJlptLabel(level));
+    label.append(checkbox, filter.label);
     jlptFilterOptions.append(label);
   }
 }
@@ -412,22 +567,61 @@ function updateJlptFilterPreference(event) {
     event.target.checked = true;
     checkedInputs.push(event.target);
   }
-  selectedJlptLevels = new Set(checkedInputs.map((input) => input.value));
+  selectedPracticeFilters = new Set(checkedInputs.map((input) => input.value));
   resetSessionHistory();
   void showNextSentence();
 }
 
 function getFilteredSentences() {
-  if (availableJlptLevels.length <= 1) return sentencePool;
-  return sentencePool.filter((sentence) => selectedJlptLevels.has(normalizeJlptLevel(sentence.jlptLevel)));
+  if (availablePracticeFilters.length <= 1) return sentencePool;
+  return sentencePool.filter((sentence) => selectedPracticeFilters.has(getSentencePracticeFilterId(sentence)));
 }
 
-function collectJlptLevels(sentences) {
-  return Array.from(new Set(sentences.map((sentence) => normalizeJlptLevel(sentence.jlptLevel)).filter(Boolean)));
+function collectPracticeFilters(sentences) {
+  const filters = new Map();
+  for (const sentence of sentences) {
+    const id = getSentencePracticeFilterId(sentence);
+    if (!id || filters.has(id)) continue;
+    filters.set(id, {
+      id,
+      label: sentence.practiceFilterLabel || formatPracticeFilterLabel(sentence),
+      source: sentence.source || ""
+    });
+  }
+  return Array.from(filters.values());
 }
 
-function normalizeJlptLevels(levels) {
-  return Array.from(new Set(levels.map(normalizeJlptLevel).filter(Boolean))).sort(compareJlptLevels);
+function normalizePracticeFilters(filters) {
+  const byId = new Map();
+  for (const filter of filters) {
+    if (typeof filter === "string") {
+      const id = normalizeJlptLevel(filter);
+      if (id) byId.set(id, { id, label: formatJlptLabel(id) });
+      continue;
+    }
+    const id = String(filter?.id || "").trim();
+    if (!id) continue;
+    byId.set(id, {
+      id,
+      label: String(filter?.label || id),
+      source: filter?.source || ""
+    });
+  }
+  return Array.from(byId.values()).sort(comparePracticeFilters);
+}
+
+function getSentencePracticeFilterId(sentence) {
+  if (sentence.practiceFilterId) return sentence.practiceFilterId;
+  if (sentence.source === "anki") return `anki:${sentence.ankiDeck || sentence.sourceLabel || sentence.grammarTitle || "Anki"}`;
+  const level = normalizeJlptLevel(sentence.jlptLevel);
+  return level ? `bunpro:${level}` : "bunpro:unknown";
+}
+
+function formatPracticeFilterLabel(sentence) {
+  if (sentence.source === "anki") {
+    return `Anki ${sentence.ankiDeck || sentence.sourceLabel || sentence.grammarTitle || "deck"}`;
+  }
+  return `Bunpro ${formatJlptLabel(sentence.jlptLevel)}`;
 }
 
 function normalizeJlptLevel(level) {
@@ -446,8 +640,15 @@ function compareJlptLevels(a, b) {
   return a.localeCompare(b);
 }
 
+function comparePracticeFilters(a, b) {
+  const aSource = a.source || (a.id.startsWith("bunpro:") ? "bunpro" : "anki");
+  const bSource = b.source || (b.id.startsWith("bunpro:") ? "bunpro" : "anki");
+  if (aSource !== bSource) return aSource === "bunpro" ? -1 : 1;
+  if (aSource === "bunpro") return compareJlptLevels(a.id.replace(/^bunpro:/, ""), b.id.replace(/^bunpro:/, ""));
+  return a.label.localeCompare(b.label);
+}
+
 function formatJlptLabel(level) {
-  if (level === "ANKI") return "Anki";
   return level.replace(/^JLPT([1-5])$/, "JLPT N$1");
 }
 
@@ -475,9 +676,10 @@ function renderSentence(sentence, options = {}) {
   currentCorrectAnswers = [];
   answerInput.value = "";
   drillInput.value = "";
+  sourceContext.textContent = sentence.sourceContext || "From imported sentences";
   jlptLevel.textContent = sentence.jlptLevel || "-";
   grammarTitle.textContent = sentence.grammarTitle || "Grammar point";
-  grammarMeaning.textContent = sentence.grammarMeaning || "";
+  grammarMeaning.textContent = sentence.grammarMeaning || sentence.grammarHint || "";
   englishPrompt.textContent = sentence.english || "";
   referenceJapanese.textContent = sentence.japanese || "";
   renderHintVisibility();
@@ -491,8 +693,8 @@ function renderGrade(result) {
   verdictPill.textContent = result.verdict || "incorrect";
   scoreText.textContent = `${normalizeScore(result.score)} / 10`;
   feedbackText.textContent = result.feedback || "";
-  bunproSentenceText.textContent = currentSentence?.japanese
-    ? `${currentSentence.source === "anki" ? "Anki sentence" : "Bunpro sentence"}: ${currentSentence.japanese}`
+  referenceSentenceText.textContent = currentSentence?.japanese
+    ? `Reference sentence: ${currentSentence.japanese}`
     : "";
   correctionText.textContent = result.correctedJapanese
     ? `Natural answer: ${result.correctedJapanese}`
@@ -736,8 +938,18 @@ function setAnkiControlsDisabled(isDisabled) {
   ankiDeckSelect.disabled = isDisabled;
   ankiEnglishFieldSelect.disabled = isDisabled;
   ankiJapaneseFieldSelect.disabled = isDisabled;
+  ankiGrammarHintFieldSelect.disabled = isDisabled;
   ankiPreviewButton.disabled = isDisabled;
   ankiImportButton.disabled = isDisabled;
+}
+
+function setSettingsBusy(isBusy, message) {
+  saveBunproTokenButton.disabled = isBusy;
+  saveLlmSettingsButton.disabled = isBusy;
+  if (message) {
+    if (message.includes("Bunpro")) bunproSettingsStatus.textContent = message;
+    if (message.includes("LLM")) llmSettingsStatus.textContent = message;
+  }
 }
 
 function restoreStatusText() {

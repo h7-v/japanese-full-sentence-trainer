@@ -6,15 +6,16 @@ const { URL } = require("url");
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const CACHE_DIR = path.join(ROOT, "cache");
+const ENV_FILE = path.join(ROOT, ".env");
 const SYNC_CACHE_FILE = path.join(CACHE_DIR, "bunpro-sync.json");
-const ANKI_CACHE_FILE = path.join(CACHE_DIR, "anki-sync.json");
+const ANKI_CACHE_PREFIX = "anki-deck-";
 const BUNPRO_BASE_URL = "https://api.bunpro.jp/api/frontend";
 const ANKI_CONNECT_URL = process.env.ANKI_CONNECT_URL || "http://127.0.0.1:8765";
 const DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 const DEFAULT_LLM_MODEL = "gemini-3.5-flash";
 const SRS_LEVELS = ["beginner", "adept", "seasoned", "expert", "master"];
 
-loadEnv(path.join(ROOT, ".env"));
+loadEnv(ENV_FILE);
 
 const config = {
   port: Number(process.env.PORT || 5174),
@@ -31,10 +32,7 @@ const state = {
   overview: null,
   grammarPoints: [],
   sentences: [],
-  ankiSentences: [],
-  ankiSyncedAt: null,
-  ankiSyncedAtDisplay: null,
-  ankiDeck: null,
+  ankiImports: new Map(),
   grammarById: new Map(),
   hydrateCache: new Map()
 };
@@ -55,14 +53,16 @@ const server = http.createServer(async (req, res) => {
         llmBaseUrl: config.llmBaseUrl,
         syncedAt: state.syncedAt,
         syncedAtDisplay: state.syncedAtDisplay,
-        ankiSyncedAt: state.ankiSyncedAt,
-        ankiSyncedAtDisplay: state.ankiSyncedAtDisplay,
-        ankiDeck: state.ankiDeck,
+        ankiDecks: getAnkiImportSummaries(),
+        ankiSyncedAt: getLatestAnkiImport()?.syncedAt || null,
+        ankiSyncedAtDisplay: getLatestAnkiImport()?.syncedAtDisplay || null,
+        ankiDeck: getLatestAnkiImport()?.deck || null,
         grammarPointCount: state.grammarPoints.length,
         bunproSentenceCount: state.sentences.length,
-        ankiSentenceCount: state.ankiSentences.length,
+        ankiSentenceCount: getAnkiSentences().length,
         sentenceCount: getAllSentences().length,
         jlptLevels: getAvailableJlptLevels(),
+        practiceFilters: getPracticeFilters(),
         overview: state.overview
       });
     }
@@ -72,13 +72,20 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, result);
     }
 
+    if (req.method === "POST" && url.pathname === "/api/settings") {
+      const body = await readJson(req);
+      const result = saveSettings(body);
+      return sendJson(res, 200, result);
+    }
+
     if (req.method === "GET" && url.pathname === "/api/sentences") {
       if (getAllSentences().length === 0) {
         await syncBunpro();
       }
       return sendJson(res, 200, {
-        sentences: getAllSentences(),
-        jlptLevels: getAvailableJlptLevels()
+        sentences: getClientSentences(),
+        jlptLevels: getAvailableJlptLevels(),
+        practiceFilters: getPracticeFilters()
       });
     }
 
@@ -87,7 +94,7 @@ const server = http.createServer(async (req, res) => {
         await syncBunpro();
       }
       const sentence = chooseRandom(getAllSentences());
-      return sendJson(res, 200, { sentence });
+      return sendJson(res, 200, { sentence: prepareSentenceForClient(sentence) });
     }
 
     if (req.method === "GET" && url.pathname === "/api/anki/decks") {
@@ -130,7 +137,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(config.port, config.host, () => {
-  console.log(`Bunpro Full Sentence Trainer running at http://${config.host}:${config.port}`);
+  console.log(`Japanese Full Sentence Trainer running at http://${config.host}:${config.port}`);
 });
 
 async function syncBunpro() {
@@ -186,10 +193,58 @@ async function syncBunpro() {
     fetchedLevels: reviewsByLevel,
     grammarPointCount: hydrated.length,
     sentenceCount: sentences.length,
-    jlptLevels: getAvailableJlptLevels()
+    jlptLevels: getAvailableJlptLevels(),
+    practiceFilters: getPracticeFilters()
   };
   saveSyncCache();
   return result;
+}
+
+function saveSettings(body) {
+  const updates = {};
+
+  const bunproToken = trimString(body?.bunproToken);
+  if (bunproToken) {
+    updates.BUNPRO_API_TOKEN = bunproToken;
+    config.bunproToken = bunproToken;
+    process.env.BUNPRO_API_TOKEN = bunproToken;
+  }
+
+  const llmBaseUrl = stripTrailingSlash(trimString(body?.llmBaseUrl));
+  if (llmBaseUrl) {
+    updates.LLM_BASE_URL = llmBaseUrl;
+    config.llmBaseUrl = llmBaseUrl;
+    process.env.LLM_BASE_URL = llmBaseUrl;
+  }
+
+  const llmApiKey = trimString(body?.llmApiKey);
+  if (llmApiKey) {
+    updates.LLM_API_KEY = llmApiKey;
+    config.llmApiKey = llmApiKey;
+    process.env.LLM_API_KEY = llmApiKey;
+  }
+
+  const llmModel = trimString(body?.llmModel);
+  if (llmModel) {
+    updates.LLM_MODEL = llmModel;
+    config.llmModel = llmModel;
+    process.env.LLM_MODEL = llmModel;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    const err = new Error("No settings to save.");
+    err.statusCode = 400;
+    err.publicMessage = "Enter at least one setting before saving.";
+    throw err;
+  }
+
+  writeEnvUpdates(updates);
+  return {
+    hasBunproToken: Boolean(config.bunproToken),
+    hasLlmCredentials: hasLlmCredentials(),
+    model: config.llmModel,
+    llmBaseUrl: config.llmBaseUrl
+  };
 }
 
 async function getAnkiDecks() {
@@ -213,12 +268,23 @@ async function previewAnkiImport(body) {
   const deck = requireNonEmptyString(body?.deck, "Anki deck is required.");
   const englishField = requireNonEmptyString(body?.englishField, "English field is required.");
   const japaneseField = requireNonEmptyString(body?.japaneseField, "Japanese field is required.");
+  const grammarHintField = String(body?.grammarHintField || "").trim();
   const noteIds = await findAnkiNotes(deck);
   const notes = await getAnkiNotes(noteIds.slice(0, 200));
-  const sentences = normalizeAnkiNotes(notes, { deck, englishField, japaneseField }).slice(0, 10);
+  const normalizedSentences = normalizeAnkiNotes(notes, { deck, englishField, japaneseField, grammarHintField });
+  const sentences = normalizedSentences.slice(0, 10);
   return {
     deck,
     noteCount: noteIds.length,
+    checkedNoteCount: notes.length,
+    usableSentenceCount: normalizedSentences.length,
+    skippedSentenceCount: Math.max(0, notes.length - normalizedSentences.length),
+    selectedFields: {
+      englishField,
+      japaneseField,
+      grammarHintField
+    },
+    samples: buildAnkiPreviewSamples(notes, { englishField, japaneseField, grammarHintField }),
     preview: sentences.map((sentence) => ({
       id: sentence.id,
       english: sentence.english,
@@ -231,29 +297,38 @@ async function importAnkiSentences(body) {
   const deck = requireNonEmptyString(body?.deck, "Anki deck is required.");
   const englishField = requireNonEmptyString(body?.englishField, "English field is required.");
   const japaneseField = requireNonEmptyString(body?.japaneseField, "Japanese field is required.");
+  const grammarHintField = String(body?.grammarHintField || "").trim();
   const noteIds = await findAnkiNotes(deck);
   const sentences = [];
 
   for (let i = 0; i < noteIds.length; i += 100) {
     const notes = await getAnkiNotes(noteIds.slice(i, i + 100));
-    sentences.push(...normalizeAnkiNotes(notes, { deck, englishField, japaneseField }));
+    sentences.push(...normalizeAnkiNotes(notes, { deck, englishField, japaneseField, grammarHintField }));
   }
 
-  state.ankiSyncedAt = new Date().toISOString();
-  state.ankiSyncedAtDisplay = formatLocalTimestamp(state.ankiSyncedAt);
-  state.ankiDeck = deck;
-  state.ankiSentences = dedupeSentences(sentences);
-  saveAnkiCache();
+  const syncedAt = new Date().toISOString();
+  const deckImport = {
+    deck,
+    syncedAt,
+    syncedAtDisplay: formatLocalTimestamp(syncedAt),
+    englishField,
+    japaneseField,
+    grammarHintField: grammarHintField || "",
+    sentences: dedupeSentences(sentences)
+  };
+  state.ankiImports.set(deck, deckImport);
+  saveAnkiCache(deck);
 
   return {
     deck,
     noteCount: noteIds.length,
-    importedSentenceCount: state.ankiSentences.length,
-    ankiSyncedAt: state.ankiSyncedAt,
-    ankiSyncedAtDisplay: state.ankiSyncedAtDisplay,
+    importedSentenceCount: deckImport.sentences.length,
+    ankiSyncedAt: deckImport.syncedAt,
+    ankiSyncedAtDisplay: deckImport.syncedAtDisplay,
     sentenceCount: getAllSentences().length,
     grammarPointCount: state.grammarPoints.length,
-    jlptLevels: getAvailableJlptLevels()
+    jlptLevels: getAvailableJlptLevels(),
+    practiceFilters: getPracticeFilters()
   };
 }
 
@@ -305,17 +380,26 @@ function collectAnkiFieldNames(notes) {
 function normalizeAnkiNotes(notes, options) {
   const sentences = [];
   for (const note of notes) {
-    const english = cleanAnkiField(note?.fields?.[options.englishField]?.value || "");
-    const japanese = cleanAnkiField(note?.fields?.[options.japaneseField]?.value || "");
+    const english = cleanAnkiField(getAnkiFieldValue(note, options.englishField));
+    const japanese = cleanAnkiField(getAnkiFieldValue(note, options.japaneseField));
+    const grammarHint = options.grammarHintField
+      ? cleanAnkiField(getAnkiFieldValue(note, options.grammarHintField))
+      : "";
     if (!english || !japanese) continue;
     sentences.push({
       id: `anki:${note.noteId}`,
       source: "anki",
+      sourceLabel: options.deck,
+      sourceContext: `From ${options.deck} deck`,
+      ankiDeck: options.deck,
       grammarPointId: `anki:${options.deck}`,
       grammarTitle: options.deck,
       grammarSlug: "anki",
-      grammarMeaning: "Imported from Anki",
+      grammarMeaning: grammarHint,
+      grammarHint,
       jlptLevel: "Anki",
+      practiceFilterId: getAnkiPracticeFilterId(options.deck),
+      practiceFilterLabel: `Anki ${options.deck}`,
       english,
       japanese,
       answer: "",
@@ -327,6 +411,29 @@ function normalizeAnkiNotes(notes, options) {
     });
   }
   return sentences;
+}
+
+function buildAnkiPreviewSamples(notes, options) {
+  return notes.slice(0, 5).map((note) => ({
+    noteId: note.noteId,
+    english: cleanAnkiField(getAnkiFieldValue(note, options.englishField)).slice(0, 180),
+    japanese: cleanAnkiField(getAnkiFieldValue(note, options.japaneseField)).slice(0, 180),
+    grammarHint: options.grammarHintField
+      ? cleanAnkiField(getAnkiFieldValue(note, options.grammarHintField)).slice(0, 180)
+      : "",
+    availableFields: Object.keys(note?.fields || {})
+  }));
+}
+
+function getAnkiFieldValue(note, fieldName) {
+  if (!fieldName) return "";
+  const field = note?.fields?.[fieldName];
+  if (field == null) return "";
+  if (typeof field === "string") return field;
+  if (typeof field.value === "string") return field.value;
+  if (typeof field.value === "number") return String(field.value);
+  if (typeof field.text === "string") return field.text;
+  return "";
 }
 
 function cleanAnkiField(value) {
@@ -408,11 +515,16 @@ function normalizeStudyQuestion(item, grammarAttrs, summary) {
 
   return {
     id: String(attrs.id || item.id),
+    source: "bunpro",
+    sourceLabel: "Bunpro",
+    sourceContext: "From Bunpro",
     grammarPointId: String(grammarAttrs.id || summary.id),
     grammarTitle: grammarAttrs.title || summary.title,
     grammarSlug: grammarAttrs.slug || summary.slug,
     grammarMeaning: stripHtml(grammarAttrs.meaning || summary.meaning || ""),
     jlptLevel: grammarAttrs.level || summary.level || "",
+    practiceFilterId: getBunproPracticeFilterId(grammarAttrs.level || summary.level || ""),
+    practiceFilterLabel: `Bunpro ${formatJlptLabel(grammarAttrs.level || summary.level || "")}`,
     english: stripHtml(attrs.translation || ""),
     japanese,
     answer: attrs.answer || "",
@@ -704,9 +816,13 @@ function uniqueNonEmptyStrings(values) {
   return unique;
 }
 
+function trimString(value) {
+  return String(value || "").trim();
+}
+
 function getAvailableJlptLevels() {
   const levels = new Set();
-  for (const sentence of getAllSentences()) {
+  for (const sentence of state.sentences) {
     const level = normalizeJlptLevel(sentence.jlptLevel);
     if (level) levels.add(level);
   }
@@ -714,7 +830,83 @@ function getAvailableJlptLevels() {
 }
 
 function getAllSentences() {
-  return [...state.sentences, ...state.ankiSentences];
+  return [...state.sentences, ...getAnkiSentences()];
+}
+
+function getClientSentences() {
+  return getAllSentences().map(prepareSentenceForClient);
+}
+
+function getAnkiSentences() {
+  return getAnkiImports().flatMap((deckImport) => deckImport.sentences);
+}
+
+function getAnkiImports() {
+  return Array.from(state.ankiImports.values()).sort((a, b) => a.deck.localeCompare(b.deck));
+}
+
+function getLatestAnkiImport() {
+  return getAnkiImports()
+    .filter((deckImport) => deckImport.syncedAt)
+    .sort((a, b) => new Date(b.syncedAt) - new Date(a.syncedAt))[0] || null;
+}
+
+function getAnkiImportSummaries() {
+  return getAnkiImports().map((deckImport) => ({
+    deck: deckImport.deck,
+    syncedAt: deckImport.syncedAt,
+    syncedAtDisplay: deckImport.syncedAtDisplay,
+    sentenceCount: deckImport.sentences.length
+  }));
+}
+
+function getPracticeFilters() {
+  const filters = new Map();
+
+  for (const sentence of state.sentences) {
+    const id = getBunproPracticeFilterId(sentence.jlptLevel);
+    const label = getBunproPracticeFilterLabel(sentence.jlptLevel);
+    if (id && !filters.has(id)) filters.set(id, { id, label, source: "bunpro" });
+  }
+
+  for (const deckImport of getAnkiImports()) {
+    const id = getAnkiPracticeFilterId(deckImport.deck);
+    if (!filters.has(id)) {
+      filters.set(id, {
+        id,
+        label: `Anki ${deckImport.deck}`,
+        source: "anki",
+        deck: deckImport.deck
+      });
+    }
+  }
+
+  return Array.from(filters.values()).sort(comparePracticeFilters);
+}
+
+function prepareSentenceForClient(sentence) {
+  const source = sentence.source || "bunpro";
+  if (source === "anki") {
+    const deck = sentence.ankiDeck || sentence.sourceLabel || sentence.grammarTitle || "Anki";
+    return {
+      ...sentence,
+      source,
+      sourceLabel: deck,
+      sourceContext: sentence.sourceContext || `From ${deck} deck`,
+      practiceFilterId: sentence.practiceFilterId || getAnkiPracticeFilterId(deck),
+      practiceFilterLabel: sentence.practiceFilterLabel || `Anki ${deck}`,
+      grammarMeaning: sentence.grammarHint || sentence.grammarMeaning || ""
+    };
+  }
+
+  return {
+    ...sentence,
+    source: "bunpro",
+    sourceLabel: "Bunpro",
+    sourceContext: sentence.sourceContext || "From Bunpro",
+    practiceFilterId: sentence.practiceFilterId || getBunproPracticeFilterId(sentence.jlptLevel),
+    practiceFilterLabel: sentence.practiceFilterLabel || getBunproPracticeFilterLabel(sentence.jlptLevel)
+  };
 }
 
 function dedupeSentences(sentences) {
@@ -738,6 +930,31 @@ function normalizeJlptLevel(level) {
   const value = String(level || "").trim().toUpperCase();
   const match = value.match(/N?([1-5])$/);
   return match ? `JLPT${match[1]}` : value;
+}
+
+function getBunproPracticeFilterId(level) {
+  const normalized = normalizeJlptLevel(level);
+  return normalized ? `bunpro:${normalized}` : "bunpro:unknown";
+}
+
+function getBunproPracticeFilterLabel(level) {
+  const label = formatJlptLabel(level);
+  return label ? `Bunpro ${label}` : "Bunpro";
+}
+
+function getAnkiPracticeFilterId(deck) {
+  return `anki:${String(deck || "Anki")}`;
+}
+
+function formatJlptLabel(level) {
+  const normalized = normalizeJlptLevel(level);
+  return normalized.replace(/^JLPT([1-5])$/, "JLPT N$1");
+}
+
+function comparePracticeFilters(a, b) {
+  if (a.source !== b.source) return a.source === "bunpro" ? -1 : 1;
+  if (a.source === "bunpro") return compareJlptLevels(a.id.replace(/^bunpro:/, ""), b.id.replace(/^bunpro:/, ""));
+  return a.label.localeCompare(b.label);
 }
 
 function compareJlptLevels(a, b) {
@@ -789,33 +1006,74 @@ function applySyncCache(payload) {
 }
 
 function loadAnkiCache() {
-  if (!fs.existsSync(ANKI_CACHE_FILE)) return;
-  try {
-    const payload = JSON.parse(fs.readFileSync(ANKI_CACHE_FILE, "utf8"));
-    applyAnkiCache(payload);
-    console.log("Loaded Anki import cache.");
-  } catch (error) {
-    console.warn(`Could not load Anki import cache: ${error.message}`);
+  for (const filePath of getAnkiCacheFiles()) {
+    try {
+      const payload = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      applyAnkiCache(payload);
+      console.log(`Loaded Anki import cache for ${payload.deck || payload.ankiDeck || "unknown deck"}.`);
+    } catch (error) {
+      console.warn(`Could not load Anki import cache ${path.basename(filePath)}: ${error.message}`);
+    }
   }
 }
 
-function saveAnkiCache() {
+function saveAnkiCache(deck) {
+  const deckImport = state.ankiImports.get(deck);
+  if (!deckImport) return;
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const payload = {
     savedAt: new Date().toISOString(),
-    ankiSyncedAt: state.ankiSyncedAt,
-    ankiSyncedAtDisplay: state.ankiSyncedAtDisplay,
-    ankiDeck: state.ankiDeck,
-    ankiSentences: state.ankiSentences
+    deck: deckImport.deck,
+    syncedAt: deckImport.syncedAt,
+    syncedAtDisplay: deckImport.syncedAtDisplay,
+    englishField: deckImport.englishField,
+    japaneseField: deckImport.japaneseField,
+    grammarHintField: deckImport.grammarHintField || "",
+    sentences: deckImport.sentences
   };
-  fs.writeFileSync(ANKI_CACHE_FILE, JSON.stringify(payload, null, 2));
+  fs.writeFileSync(getAnkiCacheFile(deck), JSON.stringify(payload, null, 2));
 }
 
 function applyAnkiCache(payload) {
-  state.ankiSyncedAt = payload.ankiSyncedAt || payload.savedAt || null;
-  state.ankiSyncedAtDisplay = payload.ankiSyncedAtDisplay || formatLocalTimestamp(state.ankiSyncedAt);
-  state.ankiDeck = payload.ankiDeck || null;
-  state.ankiSentences = Array.isArray(payload.ankiSentences) ? payload.ankiSentences : [];
+  const deck = payload.deck || payload.ankiDeck || null;
+  if (!deck) return;
+  const syncedAt = payload.syncedAt || payload.ankiSyncedAt || payload.savedAt || null;
+  const current = state.ankiImports.get(deck);
+  if (current?.syncedAt && syncedAt && new Date(current.syncedAt) > new Date(syncedAt)) {
+    return;
+  }
+  state.ankiImports.set(deck, {
+    deck,
+    syncedAt,
+    syncedAtDisplay: payload.syncedAtDisplay || payload.ankiSyncedAtDisplay || formatLocalTimestamp(syncedAt),
+    englishField: payload.englishField || "",
+    japaneseField: payload.japaneseField || "",
+    grammarHintField: payload.grammarHintField || "",
+    sentences: Array.isArray(payload.sentences)
+      ? payload.sentences
+      : Array.isArray(payload.ankiSentences)
+        ? payload.ankiSentences
+        : []
+  });
+}
+
+function getAnkiCacheFiles() {
+  if (!fs.existsSync(CACHE_DIR)) return [];
+  return fs.readdirSync(CACHE_DIR)
+    .filter((fileName) => {
+      const isDeckCache = fileName.startsWith(ANKI_CACHE_PREFIX) && fileName.endsWith(".json");
+      const isLegacyCache = fileName === "anki-sync.json";
+      return isDeckCache || isLegacyCache;
+    })
+    .map((fileName) => path.join(CACHE_DIR, fileName));
+}
+
+function getAnkiCacheFile(deck) {
+  return path.join(CACHE_DIR, `${ANKI_CACHE_PREFIX}${encodeFileToken(deck)}.json`);
+}
+
+function encodeFileToken(value) {
+  return Buffer.from(String(value || "Anki"), "utf8").toString("base64url");
 }
 
 function formatLocalTimestamp(isoTimestamp) {
@@ -878,6 +1136,38 @@ function contentType(filePath) {
     ".json": "application/json; charset=utf-8",
     ".svg": "image/svg+xml"
   }[ext] || "application/octet-stream";
+}
+
+function writeEnvUpdates(updates) {
+  const updateKeys = new Set(Object.keys(updates));
+  const seenKeys = new Set();
+  const lines = fs.existsSync(ENV_FILE)
+    ? fs.readFileSync(ENV_FILE, "utf8").split(/\r?\n/)
+    : [];
+
+  const nextLines = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return line;
+    const eq = line.indexOf("=");
+    if (eq === -1) return line;
+    const key = line.slice(0, eq).trim();
+    if (!updateKeys.has(key)) return line;
+    seenKeys.add(key);
+    return `${key}=${formatEnvValue(updates[key])}`;
+  });
+
+  for (const key of updateKeys) {
+    if (!seenKeys.has(key)) {
+      nextLines.push(`${key}=${formatEnvValue(updates[key])}`);
+    }
+  }
+
+  fs.writeFileSync(ENV_FILE, `${nextLines.join("\n").replace(/\n+$/, "")}\n`);
+}
+
+function formatEnvValue(value) {
+  const text = String(value || "");
+  return /^[^\s#"']+$/.test(text) ? text : JSON.stringify(text);
 }
 
 function loadEnv(filePath) {

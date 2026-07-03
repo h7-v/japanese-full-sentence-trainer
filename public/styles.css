@@ -1,12 +1,14 @@
 :root {
   color-scheme: light dark;
-  --bg: #f6f7f8;
+  --bg: #f7f7f7;
   --panel: #ffffff;
-  --text: #17191c;
-  --muted: #5b6470;
-  --line: #d9dde3;
-  --accent: #b6314f;
-  --accent-strong: #84223a;
+  --button-bg: #ffffff;
+  --text: #181818;
+  --muted: #606060;
+  --line: #d8d8d8;
+  --accent: #bc002d;
+  --accent-strong: #8f0022;
+  --button-hover: #f4f4f4;
   --ok: #157348;
   --warn: #9a6500;
   --bad: #b42318;
@@ -14,13 +16,15 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #151719;
-    --panel: #202326;
-    --text: #f4f5f6;
-    --muted: #aab1ba;
-    --line: #343940;
-    --accent: #e15c78;
-    --accent-strong: #ff8199;
+    --bg: #0f0f0f;
+    --panel: #1a1a1a;
+    --button-bg: #f8f8f8;
+    --text: #f4f4f4;
+    --muted: #9e9e9e;
+    --line: #303030;
+    --accent: #bc002d;
+    --accent-strong: #8f0022;
+    --button-hover: #e9e9e9;
   }
 }
 
@@ -48,27 +52,31 @@ select {
 
 button {
   min-height: 46px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--button-bg);
   border-radius: 6px;
-  background: var(--accent);
-  color: white;
+  background: var(--button-bg);
+  color: var(--accent);
   padding: 0 19px;
   font-weight: 700;
   cursor: pointer;
 }
 
 button:hover {
-  background: var(--accent-strong);
+  border-color: var(--button-hover);
+  background: var(--button-hover);
+  color: var(--accent-strong);
 }
 
 button.secondary {
+  border-color: var(--accent);
   background: transparent;
   color: var(--accent);
 }
 
 button.secondary:hover {
-  background: var(--accent);
-  color: white;
+  border-color: var(--button-bg);
+  background: var(--button-bg);
+  color: var(--accent-strong);
 }
 
 button:disabled {
@@ -108,7 +116,17 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.topbar-actions {
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
 .trainer {
+  display: grid;
+  gap: 14px;
+}
+
+.practice-column {
   display: grid;
   gap: 14px;
 }
@@ -126,6 +144,7 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  margin-top: 12px;
   color: var(--muted);
   font-weight: 800;
   cursor: pointer;
@@ -139,11 +158,10 @@ button:disabled {
 }
 
 .practice-settings {
-  display: flex;
-  align-items: center;
+  display: grid;
   gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 10px;
+  justify-content: flex-end;
+  margin-top: 0;
   color: var(--muted);
   font-weight: 700;
 }
@@ -167,6 +185,7 @@ button:disabled {
 
 #retryStatus {
   color: var(--muted);
+  justify-self: end;
 }
 
 .jlpt-filter {
@@ -194,6 +213,7 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  max-width: 100%;
   min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -207,6 +227,7 @@ button:disabled {
 .jlpt-option input {
   width: 18px;
   height: 18px;
+  flex: 0 0 18px;
   accent-color: var(--accent);
 }
 
@@ -224,6 +245,24 @@ button:disabled {
 
 .grammar-hint {
   margin-top: 12px;
+}
+
+.import-status {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.import-status-row {
+  display: grid;
+  gap: 3px;
+}
+
+.import-status-source {
+  color: var(--text);
+  font-weight: 800;
 }
 
 .meta-row {
@@ -255,6 +294,12 @@ h2 {
   line-height: 1.25;
 }
 
+.source-context {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 details {
   margin-top: 18px;
   color: var(--muted);
@@ -272,16 +317,28 @@ summary {
   line-height: 1.7;
 }
 
+.import-panel,
 .anki-panel {
   margin-top: 12px;
 }
 
+.import-controls,
 .anki-controls {
   display: grid;
   gap: 10px;
   margin-top: 12px;
 }
 
+.settings-form {
+  display: grid;
+  gap: 10px;
+}
+
+.import-panel > .settings-form {
+  margin-top: 12px;
+}
+
+.settings-field,
 .anki-field {
   display: grid;
   gap: 6px;
@@ -289,6 +346,7 @@ summary {
   font-weight: 800;
 }
 
+.settings-field input,
 .anki-field select {
   width: 100%;
   min-height: 46px;
@@ -297,6 +355,17 @@ summary {
   background: var(--panel);
   color: var(--text);
   padding: 0 10px;
+}
+
+.settings-note,
+.settings-status {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.settings-note {
+  font-size: 0.86rem;
 }
 
 .anki-actions {
@@ -389,13 +458,13 @@ summary {
 }
 
 #feedbackText,
-#bunproSentenceText,
+#referenceSentenceText,
 #correctionText {
   margin: 10px 0 0;
   line-height: 1.6;
 }
 
-#bunproSentenceText {
+#referenceSentenceText {
   color: var(--muted);
 }
 
@@ -460,20 +529,20 @@ summary {
 
 @media (min-width: 900px) {
   .trainer {
-    grid-template-columns: minmax(360px, 0.85fr) minmax(520px, 1.15fr);
-    grid-template-areas:
-      "prompt answer"
-      ". result"
-      "nav nav";
-    align-items: stretch;
+    grid-template-columns: minmax(300px, 0.65fr) minmax(620px, 1.35fr);
+    align-items: start;
   }
 
   .prompt-panel {
-    grid-area: prompt;
+    grid-column: 1;
+  }
+
+  .practice-column {
+    grid-column: 2;
+    align-self: start;
   }
 
   .answer-panel {
-    grid-area: answer;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 12px;
@@ -481,6 +550,10 @@ summary {
   }
 
   .answer-panel label {
+    grid-column: 1 / -1;
+  }
+
+  .answer-panel .source-context {
     grid-column: 1 / -1;
   }
 
@@ -497,13 +570,6 @@ summary {
     margin-top: 0;
   }
 
-  .result-panel {
-    grid-area: result;
-  }
-
-  .session-nav {
-    grid-area: nav;
-  }
 }
 
 @media (max-width: 720px) {

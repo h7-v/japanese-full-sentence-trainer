@@ -1,10 +1,10 @@
-# Bunpro Full Sentence Trainer
+# Japanese Full Sentence Trainer
 
-A local practice app for Bunpro grammar sentences.
+A local practice app for full-sentence Japanese translation practice.
 
-It syncs grammar points you have studied in Bunpro, shows you an English sentence, asks you to type the Japanese, and uses an LLM to grade whether your answer is good enough. Missed answers can be retried in the same session.
+It imports sentences from Bunpro or Anki, shows you an English sentence, asks you to type the Japanese, and uses an LLM to grade whether your answer is good enough. Missed answers can be retried in the same session.
 
-This is an unofficial Bunpro API experiment. Bunpro can change their frontend API at any time.
+The Bunpro importer uses an unofficial Bunpro API. Bunpro can change their frontend API at any time.
 
 ## Screenshots
 
@@ -270,6 +270,13 @@ Pressing Enter for the LLM base URL, model, and port uses the default Gemini set
 
 The setup script writes a local `.env` file. Do not share that file. It contains your private tokens.
 
+You can also start the app first and save settings from the browser:
+
+- Put your Bunpro token under **Bunpro import**
+- Put your LLM base URL, API key, and model under **LLM settings**
+
+The browser settings form writes the same local `.env` file and clears the fields after saving. If you use browser extensions that can read every page you visit, `npm run setup` or manual `.env` editing is more private because the keys are never typed into the browser.
+
 ## Start The App
 
 In the same terminal, type:
@@ -306,7 +313,7 @@ If you edit `.env`, stop and restart the app. The app reads `.env` only when it 
 
 The app can also read sentence cards from Anki through AnkiConnect. This is useful if you have cards with one field for English and one field for Japanese.
 
-This does not write anything to Anki. It only reads notes, extracts sentence pairs, and stores a local cache in `cache/anki-sync.json`.
+This does not write anything to Anki. It only reads notes, extracts sentence pairs, and stores local deck-specific cache files such as `cache/anki-deck-...json`.
 
 ### Install AnkiConnect
 
@@ -333,16 +340,17 @@ This is already the app default. You only need to put it in `.env` if you change
 5. Choose your deck.
 6. Choose the field that contains the English sentence.
 7. Choose the field that contains the Japanese sentence.
-8. Click **Preview** to check the first imported sentence pairs.
-9. Click **Import**.
+8. Optionally choose a field that contains a grammar hint.
+9. Click **Preview** to check the first imported sentence pairs.
+10. Click **Import**.
 
-Imported Anki sentences appear in the normal practice flow alongside Bunpro sentences. In the practice filters, Anki cards appear as **Anki**.
+Imported Anki sentences appear in the normal practice flow alongside Bunpro sentences. In the practice filters, each Anki deck appears separately.
 
 If your Anki cards have HTML, audio tags, or cloze markers, the app tries to clean those out before training.
 
 ## How Sync Works
 
-When you click **Sync Bunpro**, the app:
+When you click **Import Bunpro**, the app:
 
 - asks Bunpro for your studied grammar points
 - downloads example sentences for those grammar points
@@ -357,7 +365,7 @@ The cache is ignored by Git and can be safely deleted. Sync again to rebuild it.
 - Syncs studied Bunpro grammar points
 - Imports sentence cards from Anki through AnkiConnect
 - Pulls example sentences for known grammar
-- Filters practice by available JLPT levels
+- Filters practice by Bunpro JLPT level or Anki deck
 - Grades answers with an LLM through a Chat Completions-compatible API
 - Accepts natural answers, not just exact Bunpro wording
 - Uses model-provided accepted answer variants (Kana vs Kanji) for the no-API drill step
@@ -445,13 +453,15 @@ ANKI_CONNECT_URL=http://127.0.0.1:8765
 
 This app runs locally on your computer. Bunpro and LLM requests are made by the local Node server, not directly by browser JavaScript.
 
+The in-browser settings forms send keys to the local server so it can write `.env`. They do not store keys in local storage or show saved secret values again. A browser extension with permission to read all page content may still see values while you type them, so use `npm run setup` or manual `.env` editing if that is a concern.
+
 Do not share:
 
 - `.env`
 - your Bunpro token
 - your LLM or OpenAI API key
 - `cache/bunpro-sync.json`, if you consider your studied grammar data private
-- `cache/anki-sync.json`, if you consider your imported Anki sentences private
+- `cache/anki-deck-*.json`, if you consider your imported Anki sentences private
 
 ## Manual `.env` Setup
 
