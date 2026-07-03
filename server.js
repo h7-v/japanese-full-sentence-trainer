@@ -1,12 +1,14 @@
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const { spawn } = require("child_process");
 const { URL } = require("url");
 
-const ROOT = __dirname;
+const ROOT = process.pkg ? path.dirname(process.execPath) : __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const CACHE_DIR = path.join(ROOT, "cache");
 const ENV_FILE = path.join(ROOT, ".env");
+const STARTUP_ERROR_LOG = path.join(ROOT, "startup-error.log");
 const SYNC_CACHE_FILE = path.join(CACHE_DIR, "bunpro-sync.json");
 const ANKI_CACHE_PREFIX = "anki-deck-";
 const CSV_CACHE_PREFIX = "csv-file-";
@@ -15,6 +17,7 @@ const ANKI_CONNECT_URL = process.env.ANKI_CONNECT_URL || "http://127.0.0.1:8765"
 const DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 const DEFAULT_LLM_MODEL = "gemini-3.5-flash";
 const DEFAULT_FEEDBACK_LANGUAGE = "english";
+const DEFAULT_PORT = 5174;
 const MAX_CUSTOM_INSTRUCTIONS_LENGTH = 800;
 const MAX_CSV_BYTES = 2 * 1024 * 1024;
 const MAX_CSV_ROWS = 5000;
@@ -23,10 +26,22 @@ const MAX_CSV_HINT_LENGTH = 1200;
 const MAX_CSV_PREVIEW_ROWS = 10;
 const SRS_LEVELS = ["beginner", "adept", "seasoned", "expert", "master"];
 
+process.on("uncaughtException", (error) => {
+  writeStartupError(error);
+  console.error(error);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (error) => {
+  writeStartupError(error);
+  console.error(error);
+  process.exit(1);
+});
+
 loadEnv(ENV_FILE);
 
 const config = {
-  port: Number(process.env.PORT || 5174),
+  port: Number(process.env.PORT || DEFAULT_PORT),
   host: process.env.HOST || "127.0.0.1",
   bunproToken: process.env.BUNPRO_API_TOKEN || "",
   llmBaseUrl: stripTrailingSlash(process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL || DEFAULT_LLM_BASE_URL),
@@ -168,9 +183,63 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(config.port, config.host, () => {
-  console.log(`Japanese Full Sentence Trainer running at http://${config.host}:${config.port}`);
-});
+server.on("error", handleServerError);
+startServer(config.port);
+
+function startServer(port) {
+  config.port = port;
+  server.listen(config.port, config.host, () => {
+    const appUrl = `http://${config.host}:${config.port}`;
+    console.log(`Japanese Full Sentence Trainer running at ${appUrl}`);
+    openBrowser(appUrl);
+  });
+}
+
+function handleServerError(error) {
+  const canTryNextPort = error.code === "EADDRINUSE"
+    && !process.env.PORT
+    && config.port < DEFAULT_PORT + 20;
+  if (canTryNextPort) {
+    startServer(config.port + 1);
+    return;
+  }
+
+  writeStartupError(error);
+  console.error(error);
+  process.exitCode = 1;
+}
+
+function openBrowser(appUrl) {
+  if (process.env.OPEN_BROWSER === "0" || process.env.NO_OPEN_BROWSER === "1") return;
+
+  const command = process.platform === "darwin"
+    ? "open"
+    : process.platform === "win32"
+      ? "cmd"
+      : "xdg-open";
+  const args = process.platform === "win32"
+    ? ["/c", "start", "", appUrl]
+    : [appUrl];
+
+  const child = spawn(command, args, {
+    detached: true,
+    stdio: "ignore"
+  });
+  child.on("error", () => {
+    console.log(`Open this address in your browser: ${appUrl}`);
+  });
+  child.unref();
+}
+
+function writeStartupError(error) {
+  try {
+    const timestamp = new Date().toISOString();
+    const message = error?.stack || error?.message || String(error);
+    fs.appendFileSync(STARTUP_ERROR_LOG, `[${timestamp}]\n${message}\n\n`);
+  } catch {
+    // If logging fails, still let the original error surface in the console.
+  }
+}
 
 async function syncBunpro() {
   requireBunproToken();
@@ -885,6 +954,7 @@ async function gradeAnswer(body) {
       "The learner answer should use the target grammar point or an equivalent form appropriate for the prompt.",
       "Do not require the exact same nouns, pronouns, or word order when the meaning remains correct.",
       "Use a coarse 0-10 score. Give 10 for fully correct, natural answers, even when they differ from the reference.",
+      "Do not lower the score only because the learner omitted final Japanese punctuation such as 。 or ？. If a question correctly uses か, a missing final question mark must not affect the grade.",
       "Use 9 for correct answers with very small nuance, style, punctuation, or spelling issues.",
       "Use 7-8 for close answers that communicate the idea but have a noticeable grammar or naturalness issue.",
       "Use 0-6 for answers with wrong meaning, missing target grammar, or major grammar problems.",
@@ -915,7 +985,7 @@ async function gradeAnswer(body) {
       messages: [
         {
           role: "system",
-          content: "You are a careful Japanese grammar tutor. Reply only with one valid JSON object. Do not wrap it in Markdown."
+          content: "You are a careful Japanese grammar tutor. Missing final Japanese punctuation such as 。 or ？ should not affect the grade when the answer is otherwise correct. If a question correctly uses か, do not penalize a missing final question mark. Reply only with one valid JSON object. Do not wrap it in Markdown."
         },
         {
           role: "user",
@@ -1577,7 +1647,11 @@ function contentType(filePath) {
     ".css": "text/css; charset=utf-8",
     ".js": "application/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
-    ".svg": "image/svg+xml"
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp"
   }[ext] || "application/octet-stream";
 }
 

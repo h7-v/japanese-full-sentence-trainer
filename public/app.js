@@ -28,7 +28,7 @@ const drillInput = document.querySelector("#drillInput");
 const drillFeedback = document.querySelector("#drillFeedback");
 const retryDelayInput = document.querySelector("#retryDelayInput");
 const retryStatus = document.querySelector("#retryStatus");
-const retryBadge = document.querySelector("#retryBadge");
+const answeredSessionCount = document.querySelector("#answeredSessionCount");
 const jlptFilter = document.querySelector("#jlptFilter");
 const jlptFilterOptions = document.querySelector("#jlptFilterOptions");
 const importStatusPanel = document.querySelector("#importStatusPanel");
@@ -202,6 +202,7 @@ let lastStatusText = "";
 let sessionHistory = [];
 let sessionIndex = -1;
 let nextSessionEntryId = 1;
+let answeredThisSessionCount = 0;
 let retryQueue = [];
 let recentQuestionIds = [];
 let sentencePool = [];
@@ -311,9 +312,10 @@ function showSettingsTab(tab) {
 
 function renderGettingStarted(status) {
   const hasImportedSentences = Number(status.sentenceCount || 0) > 0;
+  const hasDemoSentences = isDemoSentencesEnabled();
   const needsSetup = status.hasLlmCredentials === false || !hasImportedSentences;
   const setupComplete = !needsSetup;
-  gettingStartedPanel.classList.toggle("hidden", !needsSetup);
+  gettingStartedPanel.classList.toggle("hidden", !needsSetup || hasDemoSentences);
   startTabButton.classList.toggle("hidden", setupComplete);
   if (setupComplete && startTabButton.classList.contains("active")) {
     showSettingsTab("anki");
@@ -445,6 +447,11 @@ function skipToMissed() {
 
 async function gradeAnswer(event) {
   event.preventDefault();
+  if (isCurrentAnswerCorrect()) {
+    await showNextSentence();
+    return;
+  }
+
   if (!currentSentence) {
     statusText.textContent = "Load a sentence first.";
     return;
@@ -467,6 +474,7 @@ async function gradeAnswer(event) {
     renderGrade(result);
     const entry = getCurrentEntry();
     if (entry) {
+      markEntryAnswered(entry);
       entry.answer = answer;
       entry.grade = result;
       scheduleRetryForEntry(entry, result);
@@ -1148,8 +1156,12 @@ function formatJlptLabel(level) {
 function renderSessionEntry(entry, options = {}) {
   if (!entry) return;
   currentSentence = entry.sentence;
-  retryBadge.classList.toggle("hidden", entry.source !== "retry");
+  const isRetry = entry.source === "retry";
+  answerForm.classList.toggle("retry-active", isRetry);
   renderSentence(entry.sentence, { focus: options.focus === true });
+  if (isRetry) {
+    sourceContext.textContent = `Retry question - ${sourceContext.textContent}`;
+  }
   answerInput.value = entry.answer || "";
 
   if (entry.grade) {
@@ -1167,6 +1179,8 @@ function renderSentence(sentence, options = {}) {
   drillForm.classList.add("hidden");
   drillFeedback.textContent = "";
   currentCorrectAnswers = [];
+  answerForm.classList.remove("correct-active");
+  gradeButton.textContent = "Grade";
   answerInput.value = "";
   drillInput.value = "";
   sourceContext.textContent = sentence.sourceContext || "From imported sentences";
@@ -1191,7 +1205,9 @@ function renderEmptySentenceState() {
   currentCorrectAnswers = [];
   resultPanel.classList.add("hidden");
   drillForm.classList.add("hidden");
-  retryBadge.classList.add("hidden");
+  answerForm.classList.remove("retry-active");
+  answerForm.classList.remove("correct-active");
+  gradeButton.textContent = "Grade";
   sourceContext.textContent = "Import sentences to begin.";
   englishPrompt.textContent = "Import Bunpro, Anki, or CSV sentences to begin.";
   grammarMeaning.textContent = "";
@@ -1221,6 +1237,13 @@ function renderGrade(result) {
     ...(Array.isArray(result.acceptedJapaneseAnswers) ? result.acceptedJapaneseAnswers : [])
   ]);
   renderDrill(result.verdict);
+  const isCorrect = result.verdict === "correct";
+  answerForm.classList.toggle("correct-active", isCorrect);
+  if (isCorrect) {
+    answerForm.classList.remove("retry-active");
+    sourceContext.textContent = currentSentence?.sourceContext || "From imported sentences";
+  }
+  gradeButton.textContent = result.verdict === "correct" ? "Next" : "Grade";
 }
 
 function renderDrill(verdict) {
@@ -1259,6 +1282,7 @@ function createSessionEntry(sentence, options = {}) {
     retryDueAt: null,
     answer: "",
     grade: null,
+    answered: false,
     drillAnswer: "",
     drillFeedback: "",
     drillFeedbackClass: ""
@@ -1268,14 +1292,31 @@ function createSessionEntry(sentence, options = {}) {
 function resetSessionHistory() {
   sessionHistory = [];
   sessionIndex = -1;
+  answeredThisSessionCount = 0;
   retryQueue = [];
   recentQuestionIds = [];
+  renderAnsweredSessionCount();
   updateNavigationState();
   updateRetryStatus();
 }
 
 function getCurrentEntry() {
   return sessionHistory[sessionIndex] || null;
+}
+
+function markEntryAnswered(entry) {
+  if (entry.answered) return;
+  entry.answered = true;
+  answeredThisSessionCount += 1;
+  renderAnsweredSessionCount();
+}
+
+function renderAnsweredSessionCount() {
+  answeredSessionCount.textContent = `Questions answered this session: ${answeredThisSessionCount}`;
+}
+
+function isCurrentAnswerCorrect() {
+  return getCurrentEntry()?.grade?.verdict === "correct";
 }
 
 function saveCurrentDraft() {

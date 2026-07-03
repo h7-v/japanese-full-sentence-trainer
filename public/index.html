@@ -14,12 +14,8 @@
           <p id="statusText">Checking local setup...</p>
         </div>
         <div class="topbar-actions">
+          <p id="answeredSessionCount" class="session-count" aria-live="polite">Questions answered this session: 0</p>
           <div class="practice-settings">
-            <label class="retry-setting" for="retryDelayInput">
-              Retry missed after
-              <input id="retryDelayInput" type="number" min="1" max="60" step="1" value="7">
-              min
-            </label>
             <span id="retryStatus" aria-live="polite">No retries waiting</span>
           </div>
         </div>
@@ -44,7 +40,6 @@
           </div>
           <div id="importStatusPanel" class="import-status hidden" aria-live="polite"></div>
           <button id="openSettingsButton" class="secondary settings-open-button" type="button">Sources & Settings</button>
-          <span id="retryBadge" class="retry-badge hidden">Retry</span>
           <details>
             <summary>Reference</summary>
             <p id="referenceJapanese"></p>
@@ -270,12 +265,23 @@
             </section>
             <section id="otherSettingsPanel" class="settings-tab-panel hidden" role="tabpanel" aria-labelledby="otherTabButton" data-settings-panel="other">
               <h3>Other</h3>
-              <label class="hint-toggle settings-checkbox-row">
-                <input id="demoSentencesToggle" type="checkbox">
-                Enable demo sentences
-              </label>
-              <p class="settings-note">Adds five simple N5-level practice sentences without importing from Bunpro, Anki, or CSV.</p>
-              <p id="demoSentencesStatus" class="settings-status" aria-live="polite"></p>
+              <div class="other-setting-group">
+                <label class="hint-toggle settings-checkbox-row">
+                  <input id="demoSentencesToggle" type="checkbox">
+                  Enable demo sentences
+                </label>
+                <p class="settings-note">Adds ten simple N5-level practice sentences without importing from Bunpro, Anki, or CSV.</p>
+                <p id="demoSentencesStatus" class="settings-status" aria-live="polite"></p>
+              </div>
+              <div class="other-setting-group">
+                <label class="settings-field retry-delay-setting" for="retryDelayInput">
+                  Retry missed after
+                  <span>
+                    <input id="retryDelayInput" type="number" min="1" max="60" step="1" value="7">
+                    min
+                  </span>
+                </label>
+              </div>
             </section>
             <section id="llmSettingsPanel" class="settings-tab-panel hidden" role="tabpanel" aria-labelledby="llmTabButton" data-settings-panel="llm">
               <h3>LLM settings</h3>

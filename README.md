@@ -2,9 +2,141 @@
 
 A local practice app for full-sentence Japanese translation practice.
 
-It imports sentences from Bunpro, Anki, or CSV files, shows you an English sentence, asks you to type the Japanese, and uses an LLM to grade whether your answer is good enough. Missed answers can be retried in the same session.
+It shows you an English sentence, asks you to type the Japanese, and uses an LLM to grade whether your answer is correct, close, or incorrect. You can import sentences from Anki, Bunpro, or CSV files, or turn on built-in demo sentences for a quick trial.
 
-The Bunpro importer uses an unofficial Bunpro API. Bunpro can change their frontend API at any time.
+The app runs on your own computer. You do not need Node.js, npm, Git, or a terminal if you download a packaged release.
+
+## Quick Start
+
+1. Open the GitHub **Releases** page for this project.
+2. Download the release ZIP for your computer.
+3. Unzip it.
+4. Keep the files together in the same folder.
+5. Start the app:
+   - Windows: double-click **Start Japanese Full Sentence Trainer.cmd**.
+   - macOS/Linux: double-click **Japanese Full Sentence Trainer**.
+6. Your browser should open automatically.
+7. Click **Start setup** if the setup window is not already open.
+
+On Windows, use the `.cmd` launcher instead of double-clicking the `.exe` directly. If startup fails, the launcher keeps the window open and shows the error.
+
+## What You Need
+
+Most users need only two things:
+
+- An LLM API key so the app can grade answers.
+- Sentences to practice with.
+
+Gemini is the recommended LLM provider because it has a free API tier. Get a Gemini API key here:
+
+[https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+
+You can get practice sentences from any of these:
+
+- **Demo sentences**: built in, useful for a quick test.
+- **Anki**: import cards from one of your Anki decks.
+- **Bunpro**: import example sentences for your studied grammar points.
+- **CSV File**: import a spreadsheet you exported as CSV.
+
+## Where To Get Keys And Tokens
+
+- Gemini API key: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- OpenAI API key, if you prefer OpenAI: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+- Bunpro token: use the instructions in the app's **Bunpro** tab, or see **Detailed Bunpro Token Instructions** below.
+
+Keep API keys and tokens private. The app saves them to `.env` in the app folder.
+
+## First Setup
+
+When the app opens, use **Sources & Settings**.
+
+### 1. Add Your LLM Key
+
+Open the **LLM** tab.
+
+For Gemini, leave the default base URL and model unless you have changed them:
+
+```text
+LLM base URL: https://generativelanguage.googleapis.com/v1beta/openai
+LLM model: gemini-3.5-flash
+```
+
+Paste your Gemini API key into **LLM API key**, then click **Save LLM settings**.
+
+If you prefer OpenAI, use:
+
+```text
+LLM base URL: https://api.openai.com/v1
+LLM model: gpt-5.4-mini
+```
+
+OpenAI API usage is billed separately from ChatGPT Plus/Pro.
+
+### 2. Try Demo Sentences
+
+For a quick test, enable demo sentences.
+
+You can turn them on from:
+
+- the **Start** tab during first setup
+- the **Other** tab later
+
+Demo sentences give you ten simple N5-level sentences without importing from Anki, Bunpro, or CSV. You still need an LLM key to grade your answers.
+
+### 3. Import Your Own Sentences
+
+You only need one source, but you can use several together.
+
+**Anki**
+
+1. Install Anki desktop from [apps.ankiweb.net](https://apps.ankiweb.net/).
+2. Install AnkiConnect add-on code [2055492159](https://ankiweb.net/shared/info/2055492159).
+3. Restart Anki.
+4. Keep Anki open.
+5. In this app, open **Sources & Settings** -> **Anki**.
+6. Click **Connect Anki**.
+7. Choose a deck.
+8. Choose the English field and Japanese field.
+9. Optionally choose a grammar hint field.
+10. Preview, then import.
+
+The app only reads from Anki. It does not edit your cards.
+
+**Bunpro**
+
+1. Get your Bunpro frontend token using the instructions in the **Bunpro** tab.
+2. Paste it into **Sources & Settings** -> **Bunpro**.
+3. Click **Save Bunpro token**.
+4. Click **Import Bunpro**.
+
+The Bunpro importer uses an unofficial Bunpro frontend API. Bunpro can change it at any time.
+
+**CSV File**
+
+Use a CSV exported from Excel, Google Sheets, or another spreadsheet app.
+
+Your CSV should have a header row and at least two columns:
+
+```csv
+English,Japanese,Hint
+The sea is beautiful.,海が綺麗だ,い-adjective / な-adjective practice
+I went to Tokyo yesterday.,昨日東京に行きました,Past tense
+```
+
+Then open **Sources & Settings** -> **CSV File**, choose the file, select the English/Japanese/hint columns, preview, and import.
+
+CSV imports are capped at 5,000 rows and 2 MB. Very long fields are shortened before saving.
+
+## Using The App
+
+- Type your Japanese answer and press Enter to grade.
+- If your answer is correct, press Enter again to move to the next question.
+- Incorrect answers can be retried after the delay set in **Other**.
+- Use **Practice filters** to choose which Bunpro levels, Anki decks, CSV files, or demo sentences appear.
+- Enable **Show grammar hints** if you want Bunpro grammar points or imported hint fields shown.
+- Open **Model Personalisation** to choose English/Japanese feedback and add optional response instructions.
+
+The app keeps a count of questions answered this session. Pressing Next without grading does not increase the count.
 
 ## Screenshots
 
@@ -16,148 +148,38 @@ The Bunpro importer uses an unofficial Bunpro API. Bunpro can change their front
 
 ![Grammar hints and grading feedback](docs/images/04.png)
 
-## Before You Start
+## Files In The Release Folder
 
-You need:
+- `.env.example` shows supported settings.
+- `.env` is created when you save keys/settings in the browser UI.
+- `cache/` stores local Bunpro, Anki, and CSV imports.
+- `public/` contains the browser UI and images.
+- `startup-error.log` appears if the app crashes during startup.
 
-- Node.js 18 or newer
-- A Gemini API key for the default free provider
-- At least one sentence source: Bunpro, Anki, or CSV
+Do not share `.env`. It contains private API keys and tokens.
 
-For Bunpro import, you need a Bunpro account and Bunpro token. For Anki import, you need Anki desktop and the AnkiConnect add-on. For CSV import, you need a CSV file with English and Japanese columns.
+To stop the packaged app, close the command/terminal window that opened with it.
 
-You do not need to understand programming to run this app, but you do need to paste a few commands into a command window.
-
-By default, the app uses Gemini with `gemini-3.5-flash` because Gemini has a free API tier. The grader uses a Chat Completions-compatible endpoint, so advanced users can also point it at OpenAI, another OpenAI-compatible provider, or a local model server if it can return JSON reliably.
-
-Important: ChatGPT Plus/Pro and OpenAI API billing are separate. A ChatGPT subscription does not pay for OpenAI API grading. If you choose OpenAI and grading fails with a quota error, you probably need to add API credit in the OpenAI developer billing page.
-
-## What Is A Terminal?
-
-A terminal is just a command window where you type short commands and press Enter.
-
-On Windows, use one of these:
-
-- **Terminal**
-- **Command Prompt**
-- **PowerShell**
-
-Open it from the Start menu by searching for one of those names.
-
-On macOS, use **Terminal**. Open it from:
-
-```text
-Applications -> Utilities -> Terminal
-```
-
-or press Command-Space, type `Terminal`, and press Enter.
-
-## Install Node.js
-
-Node.js lets your computer run this local app. It also installs `npm`, which is the command used to start the app.
-
-1. Go to [nodejs.org](https://nodejs.org/).
-2. Download the **LTS** version.
-3. Run the installer.
-4. Accept the default options.
-5. When the installer finishes, close any terminal windows that are already open.
-6. Open a new terminal.
-7. Type this and press Enter:
-
-```sh
-node -v
-```
-
-Then type this and press Enter:
-
-```sh
-npm -v
-```
-
-If both commands print version numbers, Node.js is ready.
-
-If Windows says `node` or `npm` is not recognized:
-
-1. Close the terminal and open a new one.
-2. If that does not work, restart your computer.
-3. If it still does not work, reinstall Node.js from [nodejs.org](https://nodejs.org/) and make sure any option like **Add to PATH** is enabled.
-4. You can also try opening **Node.js command prompt** from the Windows Start menu.
-
-## Download The App
-
-If you do not use Git, use the ZIP download:
-
-1. Open the GitHub page for this project.
-2. Click the green **Code** button.
-3. Click **Download ZIP**.
-4. Unzip the downloaded file.
-5. Open the unzipped folder.
-
-The folder is probably called something like:
-
-```text
-bunpro-full-sentence-trainer
-```
-
-If you are comfortable with Git, you can use:
-
-```sh
-git clone https://github.com/h7-v/bunpro-full-sentence-trainer.git
-cd bunpro-full-sentence-trainer
-```
-
-## Open A Terminal In The App Folder
-
-The terminal needs to be looking at the app folder before the start commands will work.
-
-### Windows
-
-1. Open the unzipped app folder.
-2. Click the address bar at the top of File Explorer.
-3. Type `cmd`.
-4. Press Enter.
-
-A Command Prompt window should open inside that folder.
-
-If that does not work:
-
-1. Open **Terminal**, **Command Prompt**, or **PowerShell** from the Start menu.
-2. Type `cd ` with a space after it.
-3. Drag the app folder into the terminal window.
-4. Press Enter.
-
-### macOS
-
-Try this first:
-
-1. Right click the app folder.
-2. Click **New Terminal at Folder**.
-
-If you do not see that option:
-
-1. Open **Terminal**.
-2. Type `cd ` with a space after it.
-3. Drag the app folder into the Terminal window.
-4. Press Enter.
-
-## Get A Bunpro Token
+## Detailed Bunpro Token Instructions
 
 Bunpro does not currently document this frontend API for third-party apps, so this part is more awkward than the rest.
 
-1. Log in to [bunpro.jp](https://bunpro.jp/).
+1. Log in to [bunpro.jp/dashboard](https://bunpro.jp/dashboard).
 2. Open your browser developer tools.
    - Chrome or Edge: right click the page, click **Inspect**, then click the **Network** tab.
    - Firefox: right click the page, click **Inspect**, then click the **Network** tab.
 3. Refresh Bunpro while the Network tab is open.
-4. Click a request such as `user`, `queue`, `due`, or `srs_level_overview`. On Chrome, the type is a `fetch`.
-5. Look for **Request Headers**.
-6. Find the `authorization` header. It looks like this:
+4. Search for `user`.
+5. Click a request such as `user`, `queue`, `due`, or `srs_level_overview`. On Chrome, the type is usually `fetch`.
+6. Open the **Headers** tab for that request.
+7. Scroll to **Request Headers**.
+8. Find the `authorization` header. It looks like this:
 
 ```text
 Token token=your_bunpro_token_here
 ```
 
-7. Copy only the part after `token=`.
+Copy only the part after `token=`.
 
 Example:
 
@@ -171,290 +193,91 @@ The Bunpro token value is:
 abc123
 ```
 
-Important: Bunpro warns that this token can give third-party apps read and write access to your Bunpro data. This app only uses read-oriented endpoints, but you should still treat the token like a password.
-
-## Choose An LLM Provider
-
-The app grades answers through an OpenAI-compatible Chat Completions endpoint.
-
-Most users should use the default Gemini setup:
-
-```sh
-LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-LLM_API_KEY=your_gemini_api_key_here
-LLM_MODEL=gemini-3.5-flash
-```
-
-To use OpenAI instead:
-
-```sh
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=your_openai_api_key_here
-LLM_MODEL=gpt-5.4-mini
-```
-
-You can also try a local provider if it exposes an OpenAI-compatible API, for example:
-
-```sh
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_API_KEY=dummy
-LLM_MODEL=your_local_model_name
-```
-
-Local model quality varies. For this app, the model needs to understand English and Japanese, follow grading instructions, and return valid JSON.
-
-## Get A Gemini API Key
-
-Gemini is the recommended default because it has a free API tier. Skip this section only if you are using OpenAI or a local provider instead.
-
-1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
-2. Sign in.
-3. Create a Gemini API key. One should be created for you and listed as the "Default Gemini API Key".
-4. Click the key link (e.g.: ...sl2Q). Copy the full API key somewhere temporary so you can paste it into the app.
-
-## Using OpenAI Instead
-
-If you prefer OpenAI, use these values in **Sources & Settings** or in `.env`:
-
-```sh
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=your_openai_api_key_here
-LLM_MODEL=gpt-5.4-mini
-```
-
-1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
-2. Sign in.
-3. Create a new secret key.
-4. Copy the key somewhere temporary so you can paste it into the app.
-
-Important: The OpenAI API is billed through the OpenAI developer platform. It is not included with ChatGPT Plus/Pro.
-
-If you use OpenAI and the app says grading failed because of quota:
-
-1. Go to the OpenAI developer billing page.
-2. Add a small amount of credit, such as 5 USD.
-3. Try grading again.
-
-About 5 USD should cover roughly 2,000 graded questions, depending on the model and how long the sentences are.
-
-## Start The App
-
-In the terminal that is open in the app folder, type:
-
-```sh
-npm start
-```
-
-Press Enter.
-
-Then open this address in your browser:
-
-```text
-http://127.0.0.1:5174
-```
-
-Leave the terminal window open while you use the app. If you close it, the app stops.
-
-This project has no npm package dependencies. You do not need to run `npm install`.
-
-## Set Up The App
-
-The first time you open the browser page, the app shows **Sources & Settings**.
-
-1. Open **LLM** and save your LLM base URL, API key, and model.
-2. Open **Bunpro** and save your Bunpro token, or open **Anki** and import an Anki deck.
-3. Start practicing once at least one source has imported sentences.
-
-The browser settings form writes a local `.env` file and clears secret fields after saving. Do not share `.env`; it contains your private tokens.
-
-If you use browser extensions that can read every page you visit, manual `.env` editing is more private because keys are never typed into the browser.
-
-## Stop The App
-
-Click the terminal window and press:
-
-```text
-Ctrl-C
-```
-
-On macOS, this is still Control-C, not Command-C.
-
-If you edit `.env`, stop and restart the app. The app reads `.env` only when it starts.
-
-## Optional: Import Anki Sentence Cards
-
-The app can also read sentence cards from Anki through AnkiConnect. This is useful if you have cards with one field for English and one field for Japanese.
-
-This does not write anything to Anki. It only reads notes, extracts sentence pairs, and stores local deck-specific cache files such as `cache/anki-deck-...json`.
-
-### Install AnkiConnect
-
-1. Install Anki desktop from [apps.ankiweb.net](https://apps.ankiweb.net/) if you do not already have it.
-2. Open Anki.
-3. Install the AnkiConnect add-on from [ankiweb.net/shared/info/2055492159](https://ankiweb.net/shared/info/2055492159).
-4. Restart Anki after installing the add-on.
-5. Keep Anki open while importing cards.
-
-The default AnkiConnect address is:
-
-```sh
-ANKI_CONNECT_URL=http://127.0.0.1:8765
-```
-
-## Optional: Import CSV Sentence Files
-
-The app can import sentence pairs from a CSV file exported from Excel, Google Sheets, or another spreadsheet app.
-
-Your CSV should have a header row and at least two columns:
-
-- English sentence
-- Japanese sentence
-- Optional hint
-
-Example:
-
-```csv
-English,Japanese,Hint
-The sea is beautiful.,海が綺麗だ,い-adjective / な-adjective practice
-I went to Tokyo yesterday.,昨日東京に行きました,Past tense
-```
-
-In the browser:
-
-1. Open **Sources & Settings**.
-2. Open **CSV File**.
-3. Choose your CSV file.
-4. Select the English, Japanese, and optional hint columns.
-5. Preview the import.
-6. Click **Import**.
-
-CSV imports are capped at 5,000 rows and 2 MB. Very long fields are shortened before saving so an accidental huge spreadsheet cell cannot take over the app.
-
-This is already the app default. You only need to put it in `.env` if you changed your AnkiConnect settings.
-
-### Import From Anki
-
-1. Start the trainer with `npm start`.
-2. Open `http://127.0.0.1:5174`.
-3. Open **Anki import**.
-4. Click **Connect Anki**.
-5. Choose your deck.
-6. Choose the field that contains the English sentence.
-7. Choose the field that contains the Japanese sentence.
-8. Optionally choose a field that contains a grammar hint.
-9. Click **Preview** to check the first imported sentence pairs.
-10. Click **Import**.
-
-Imported Anki sentences appear in the normal practice flow alongside Bunpro sentences. In the practice filters, each Anki deck appears separately.
-
-If your Anki cards have HTML, audio tags, or cloze markers, the app tries to clean those out before training.
-
-## How Sync Works
-
-When you click **Import Bunpro**, the app:
-
-- asks Bunpro for your studied grammar points
-- downloads example sentences for those grammar points
-- stores a local cache in `cache/bunpro-sync.json`
-
-If you have advanced further into your Bunpro decks, sync again to add the new grammar points.
-
-The cache is ignored by Git and can be safely deleted. Sync again to rebuild it.
-
-## Features
-
-- Syncs studied Bunpro grammar points
-- Imports sentence cards from Anki through AnkiConnect
-- Pulls example sentences for known grammar
-- Filters practice by Bunpro JLPT level or Anki deck
-- Grades answers with an LLM through a Chat Completions-compatible API
-- Accepts natural answers, not just exact Bunpro wording
-- Uses model-provided accepted answer variants (Kana vs Kanji) for the no-API drill step
-- Keeps a session history with Previous/Next
-- Schedules missed answers for short-term (default is 7 minutes) retry
-- Lets you skip directly to missed answers before ending a session
-
-## Troubleshooting
-
-### `node` or `npm` is not found
-
-Install Node.js from [nodejs.org](https://nodejs.org/), then close and reopen your terminal.
-
-On Windows, also try:
-
-- Restarting your computer
-- Opening **Node.js command prompt** from the Start menu
-- Reinstalling Node.js and enabling **Add to PATH** if the installer shows that option
-
-### The page says the Bunpro token is missing
-
-Open **Sources & Settings**, go to **Bunpro**, save your Bunpro token, then try importing again.
-
-### The page says the LLM key is missing
-
-Open **Sources & Settings**, go to **LLM**, save your LLM API key, then try grading again. If you are using a local provider that does not require a key, make sure `LLM_BASE_URL` points to a local address such as `http://localhost:11434/v1`.
-
-### Gemini grading failed
-
-Check that:
-
-- your `.env` file has `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai`
-- your `.env` file has `LLM_MODEL=gemini-3.5-flash`
-- your `LLM_API_KEY` value is a Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-- you stopped and restarted the app after editing `.env`
-
-### OpenAI grading failed because of quota
-
-This usually means your OpenAI developer account does not have API credit available.
-
-ChatGPT Plus/Pro does not include API usage. Add billing credit in the OpenAI developer dashboard. About 5 USD should cover roughly 2,000 graded questions, depending on model prices and answer length.
-
-### The browser page will not open
-
-Make sure `npm start` is still running in the terminal. Then open:
-
-```text
-http://127.0.0.1:5174
-```
-
-If you changed the local port in `.env`, use that port number instead of `5174`.
-
-### Bunpro sync fails
-
-The Bunpro frontend API is unofficial. The endpoint names, token behavior, or response shapes may change.
-
-### Anki import cannot connect
-
-Check that:
-
-- Anki desktop is open
-- AnkiConnect is installed
-- Anki was restarted after installing AnkiConnect
-- `.env` has the correct `ANKI_CONNECT_URL` if you changed the default AnkiConnect port
-
-The default is:
-
-```sh
-ANKI_CONNECT_URL=http://127.0.0.1:8765
-```
+Treat this token like a password. Bunpro warns that this token can give third-party apps read and write access to your Bunpro data. This app only uses read-oriented endpoints, but the token itself is still sensitive.
 
 ## Privacy
 
-This app runs locally on your computer. Bunpro and LLM requests are made by the local Node server, not directly by browser JavaScript.
+This app runs locally on your computer. Bunpro, AnkiConnect, CSV parsing, and LLM grading requests are handled by the local app server.
 
-The in-browser settings forms send keys to the local server so it can write `.env`. They do not store keys in local storage or show saved secret values again. A browser extension with permission to read all page content may still see values while you type them, so use manual `.env` editing if that is a concern.
+The browser setup form sends keys to the local app server so it can write `.env`. It does not store secret values in local storage or show saved secret values again.
+
+A browser extension with permission to read all page content may still see values while you type them. If that worries you, edit `.env` manually instead of typing keys into the browser page.
 
 Do not share:
 
 - `.env`
 - your Bunpro token
-- your LLM or OpenAI API key
+- your Gemini/OpenAI/local LLM API key
 - `cache/bunpro-sync.json`, if you consider your studied grammar data private
 - `cache/anki-deck-*.json`, if you consider your imported Anki sentences private
+- `cache/csv-file-*.json`, if you consider your imported CSV sentences private
 
-## Manual `.env` Setup
+## Troubleshooting
 
-Most users should use the browser setup. Advanced users can create `.env` manually:
+### The App Opens And Immediately Closes On Windows
+
+Use **Start Japanese Full Sentence Trainer.cmd** instead of the `.exe`.
+
+If it still fails, check `startup-error.log` in the same folder.
+
+### The Browser Page Does Not Open
+
+The app normally opens your browser automatically. If it does not, open:
+
+```text
+http://127.0.0.1:5174
+```
+
+If that does not work, the app may not be running. Start it again from the release folder.
+
+### The Page Says The LLM Key Is Missing
+
+Open **Sources & Settings** -> **LLM**, paste your API key, then save.
+
+For Gemini, check that:
+
+- the key came from [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- the base URL is `https://generativelanguage.googleapis.com/v1beta/openai`
+- the model is `gemini-3.5-flash`
+
+### OpenAI Grading Failed Because Of Quota
+
+ChatGPT Plus/Pro does not include OpenAI API usage.
+
+If you use OpenAI and receive a quota error, add API credit in the OpenAI developer billing page. About 5 USD should cover roughly 2,000 graded questions, depending on model prices and sentence length.
+
+### Anki Import Cannot Connect
+
+Check that:
+
+- Anki desktop is open.
+- AnkiConnect is installed.
+- Anki was restarted after installing AnkiConnect.
+- The AnkiConnect add-on code is `2055492159`.
+
+The default AnkiConnect address is:
+
+```text
+http://127.0.0.1:8765
+```
+
+### Bunpro Import Fails
+
+Check that:
+
+- your Bunpro token was copied correctly
+- you copied only the value after `token=`
+- you are still logged in to Bunpro
+
+The Bunpro frontend API is unofficial. If Bunpro changes their site/API, importing may break until the app is updated.
+
+## Advanced: Manual `.env` Setup
+
+Most users should use **Sources & Settings** in the browser.
+
+Advanced users can create or edit `.env` manually in the app folder.
+
+Gemini example:
 
 ```sh
 BUNPRO_API_TOKEN=your_bunpro_token_here
@@ -480,4 +303,72 @@ PORT=5174
 ANKI_CONNECT_URL=http://127.0.0.1:8765
 ```
 
+Local OpenAI-compatible provider example:
+
+```sh
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=dummy
+LLM_MODEL=your_local_model_name
+```
+
+Local model quality varies. The model needs to understand English and Japanese, follow grading instructions, and return valid JSON.
+
 Older `.env` files that use `OPENAI_API_KEY`, `OPENAI_MODEL`, or `OPENAI_BASE_URL` still work, but new setups should use the `LLM_*` names.
+
+If you edit `.env` manually, restart the app. `.env` is read when the app starts.
+
+## Advanced: Run From Source
+
+Running from source is only for people who want to develop the app or avoid the packaged release.
+
+You need Node.js 18 or newer.
+
+```sh
+git clone https://github.com/h7-v/bunpro-full-sentence-trainer.git
+cd bunpro-full-sentence-trainer
+npm start
+```
+
+Your browser should open automatically. If it does not, open:
+
+```text
+http://127.0.0.1:5174
+```
+
+If you are only running the app from source, you do not need to run `npm install`.
+
+## Advanced: Build A Release
+
+These commands are for maintainers. They create portable release folders in `dist/`.
+
+Building releases requires Node.js 22 or newer because the packaging tool runs on modern Node. Running the app from source only requires Node.js 18 or newer.
+
+```sh
+npm install
+npm run package:mac-arm64
+npm run package:mac-x64
+npm run package:win-x64
+npm run package:linux-x64
+```
+
+You can also build all configured targets:
+
+```sh
+npm run package:all
+```
+
+Each release folder includes a standalone executable, `public/`, `.env.example`, `cache/`, and `START-HERE.txt`. Windows builds also include `Start Japanese Full Sentence Trainer.cmd`. Zip the whole folder for release.
+
+## Features
+
+- Imports sentence cards from Anki through AnkiConnect.
+- Imports studied Bunpro grammar points and example sentences.
+- Imports CSV files with English, Japanese, and optional hint columns.
+- Includes ten built-in demo sentences.
+- Filters practice by Bunpro JLPT level, Anki deck, CSV file, and demo source.
+- Grades answers with an LLM through a Chat Completions-compatible API.
+- Accepts natural answers, not just exact Bunpro wording.
+- Uses model-provided accepted answer variants for the no-API drill step.
+- Keeps a session history with Previous/Next.
+- Schedules missed answers for short-term retry.
+- Lets you skip directly to missed answers.

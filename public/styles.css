@@ -142,8 +142,19 @@ a:hover {
 }
 
 .topbar-actions {
-  justify-content: flex-end;
-  align-items: flex-start;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.session-count {
+  width: 100%;
+  margin: 0;
+  color: var(--muted);
+  text-align: right;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .trainer {
@@ -249,20 +260,23 @@ a:hover {
 
 .practice-settings {
   display: grid;
-  gap: 12px;
+  gap: 6px;
   justify-content: flex-end;
+  justify-items: end;
   margin-top: 0;
   color: var(--muted);
   font-weight: 700;
 }
 
-.retry-setting {
+.retry-setting,
+.retry-delay-setting span {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
-.retry-setting input {
+.retry-setting input,
+.retry-delay-setting input {
   width: 77px;
   min-height: 38px;
   border: 1px solid var(--line);
@@ -321,16 +335,16 @@ a:hover {
   accent-color: var(--accent);
 }
 
-.retry-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  margin-top: 12px;
-  border-radius: 999px;
-  background: var(--warn);
-  color: white;
-  padding: 0 10px;
-  font-weight: 800;
+.answer-panel.retry-active {
+  border-color: var(--warn);
+}
+
+.answer-panel.retry-active .source-context {
+  color: var(--warn);
+}
+
+.answer-panel.correct-active {
+  border-color: var(--ok);
 }
 
 .grammar-hint {
@@ -462,6 +476,10 @@ summary {
   line-height: 1.45;
 }
 
+.settings-field.retry-delay-setting input {
+  width: 77px;
+}
+
 .csv-column-fields {
   display: grid;
   gap: 10px;
@@ -532,6 +550,15 @@ summary {
 
 .settings-note {
   font-size: 0.86rem;
+}
+
+.other-setting-group {
+  display: grid;
+  gap: 8px;
+}
+
+.other-setting-group + .other-setting-group {
+  margin-top: 18px;
 }
 
 .token-help {

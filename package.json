@@ -3,11 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "commonjs",
+  "bin": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "package:mac-arm64": "node scripts/package-release.js macos-arm64",
+    "package:mac-x64": "node scripts/package-release.js macos-x64",
+    "package:win-x64": "node scripts/package-release.js win-x64",
+    "package:linux-x64": "node scripts/package-release.js linux-x64",
+    "package:all": "node scripts/package-release.js all"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "latest"
   }
 }
