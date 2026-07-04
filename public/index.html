@@ -115,7 +115,7 @@
               <ol class="setup-steps">
                 <li>
                   <span>Choose an LLM provider.</span>
-                  <p>Gemini is the default free option. Get a Gemini key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>. OpenAI keys can be created at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">OpenAI Platform</a>.</p>
+                  <p>Use a local OpenAI-compatible server, OpenAI, Gemini, or another compatible provider. Hosted providers have their own age, audience, region, billing, privacy, and data-use terms.</p>
                   <button id="setupLlmButton" class="secondary" type="button">Enter LLM settings</button>
                 </li>
                 <li>
@@ -285,6 +285,8 @@
             </section>
             <section id="llmSettingsPanel" class="settings-tab-panel hidden" role="tabpanel" aria-labelledby="llmTabButton" data-settings-panel="llm">
               <h3>LLM settings</h3>
+              <p class="settings-note">Choose a provider you are allowed to use: a local OpenAI-compatible server, OpenAI, Gemini, or another compatible Chat Completions API.</p>
+              <p class="settings-note">Gemini keys are available from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI Studio</a> and OpenAI keys from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">OpenAI Platform</a>. Before using Gemini, check Google's current <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noreferrer">Gemini API terms</a>, including age, audience, region, billing, and unpaid-quota data-use requirements.</p>
               <form id="llmSettingsForm" class="settings-form" autocomplete="off">
                 <label class="settings-field" for="llmBaseUrlInput">
                   LLM base URL

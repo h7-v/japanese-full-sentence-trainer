@@ -189,6 +189,8 @@ function writeReleaseNotes(releaseDir, executableName, targetName, version) {
     "Local import cache: cache/",
     "Startup error log: startup-error.log",
     "",
+    "Before using a hosted LLM provider, check its current age, audience, region, billing, privacy, and data-use terms.",
+    "",
     ...windowsNote,
     ...(windowsNote.length ? [""] : []),
     "Keep this folder together. The executable expects public/ and cache/ to stay next to it.",

@@ -41,11 +41,13 @@ Most users need only two things:
 - An LLM API key so the app can grade answers.
 - Sentences to practice with.
 
-Gemini is the recommended LLM provider because it has a free API tier. Get a Gemini API key here:
+Choose an LLM provider that fits your situation:
 
-[https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- **Local OpenAI-compatible server**: the most private option, because grading can stay on your computer. Model quality and setup vary.
+- **OpenAI API**: hosted, paid API usage. ChatGPT Plus/Pro does not include OpenAI API credit.
+- **Gemini API**: supported, including Gemini's OpenAI-compatible endpoint, but check Google's current Gemini API terms before using it.
 
-You can also use OpenAI or a local LLM server if it provides an OpenAI-compatible Chat Completions API and can reliably return JSON.
+This project is not legal advice. Hosted LLM providers have their own terms for age, audience, billing, region, privacy, and data use. Do not assume a free or unpaid API quota is suitable for every user or use case.
 
 You can get practice sentences from any of these:
 
@@ -56,8 +58,9 @@ You can get practice sentences from any of these:
 
 ## Where To Get Keys And Tokens
 
-- Gemini API key: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- Local OpenAI-compatible server: follow your local server's instructions. Some local servers accept a dummy API key.
 - OpenAI API key, if you prefer OpenAI: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+- Gemini API key, if you choose Gemini: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 - Bunpro token: use the instructions in the app's **Bunpro** tab, or see **Detailed Bunpro Token Instructions** below.
 
 Keep API keys and tokens private. The app saves them to `.env` in the app folder.
@@ -70,14 +73,14 @@ When the app opens, use **Sources & Settings**.
 
 Open the **LLM** tab.
 
-For Gemini, leave the default base URL and model unless you have changed them:
+If you use a local LLM, enter your local OpenAI-compatible base URL and model:
 
 ```text
-LLM base URL: https://generativelanguage.googleapis.com/v1beta/openai
-LLM model: gemini-3.5-flash
+LLM base URL: http://localhost:11434/v1
+LLM model: your_local_model_name
 ```
 
-Paste your Gemini API key into **LLM API key**, then click **Save LLM settings**.
+Local model quality varies. The model needs to understand English and Japanese, follow grading instructions, and return valid JSON.
 
 If you prefer OpenAI, use:
 
@@ -88,9 +91,26 @@ LLM model: gpt-5.4-mini
 
 OpenAI API usage is billed separately from ChatGPT Plus/Pro.
 
-If you use a local LLM, enter your local OpenAI-compatible base URL and model in the same **LLM** tab. Local model quality varies; the model needs to understand English and Japanese, follow grading instructions, and return valid JSON.
+If you choose Gemini, the app can use Gemini's OpenAI-compatible endpoint:
+
+```text
+LLM base URL: https://generativelanguage.googleapis.com/v1beta/openai
+LLM model: gemini-3.5-flash
+```
+
+Gemini may offer unpaid quota, but Google has specific Gemini API terms covering age, audience, region, billing, and data use. Check the current [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms) and [Gemini API billing documentation](https://ai.google.dev/gemini-api/docs/billing) before using it.
+
+Paste your provider key into **LLM API key**, then click **Save LLM settings**.
 
 To choose whether grading feedback is written in English or Japanese, open **Model Personalisation** and change **Model response language**.
+
+### Provider Terms Note
+
+Before using a hosted LLM provider, check that your use complies with that provider's current terms.
+
+For Gemini specifically, Google's current Gemini API terms say the API is for developers building with Google AI models for professional or business purposes, not consumer use; users must be 18 or older; and API clients must not be directed toward or likely to be accessed by under-18s. The terms also include region, paid-service, unpaid-quota, and data-use requirements.
+
+If you use Gemini, you are responsible for checking whether free/unpaid quota, paid billing, or Gemini at all is appropriate for your use case and region. A local OpenAI-compatible model is the best option if you want grading without sending prompts and answers to a hosted LLM provider.
 
 ### 2. Try Demo Sentences
 
@@ -213,6 +233,10 @@ The browser setup form sends keys to the local app server so it can write `.env`
 
 A browser extension with permission to read all page content may still see values while you type them. If that worries you, edit `.env` manually instead of typing keys into the browser page.
 
+When you grade an answer with a hosted LLM provider, the app sends the English prompt, your Japanese answer, the reference answer, any hint/context, and your model personalisation instructions to that provider. Local LLM providers avoid this hosted-provider data transfer, assuming your local server is actually running on your own machine.
+
+If you use Gemini unpaid quota, Google's terms describe additional data-use rules for Unpaid Services, including possible human review outside the UK/EEA/Switzerland data-use carve-out. Check Google's current terms before sending anything sensitive, confidential, or personal.
+
 Do not share:
 
 - `.env`
@@ -287,18 +311,19 @@ Most users should use **Sources & Settings** in the browser.
 
 Advanced users can create or edit `.env` manually in the app folder.
 
-Gemini example:
+Local OpenAI-compatible provider example:
 
 ```sh
-BUNPRO_API_TOKEN=your_bunpro_token_here
-LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-LLM_API_KEY=your_gemini_api_key_here
-LLM_MODEL=gemini-3.5-flash
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=dummy
+LLM_MODEL=your_local_model_name
 LLM_FEEDBACK_LANGUAGE=english
 LLM_CUSTOM_INSTRUCTIONS=
 PORT=5174
 ANKI_CONNECT_URL=http://127.0.0.1:8765
 ```
+
+Local model quality varies. The model needs to understand English and Japanese, follow grading instructions, and return valid JSON.
 
 OpenAI example:
 
@@ -313,15 +338,20 @@ PORT=5174
 ANKI_CONNECT_URL=http://127.0.0.1:8765
 ```
 
-Local OpenAI-compatible provider example:
+Gemini example:
 
 ```sh
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_API_KEY=dummy
-LLM_MODEL=your_local_model_name
+BUNPRO_API_TOKEN=your_bunpro_token_here
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+LLM_API_KEY=your_gemini_api_key_here
+LLM_MODEL=gemini-3.5-flash
+LLM_FEEDBACK_LANGUAGE=english
+LLM_CUSTOM_INSTRUCTIONS=
+PORT=5174
+ANKI_CONNECT_URL=http://127.0.0.1:8765
 ```
 
-Local model quality varies. The model needs to understand English and Japanese, follow grading instructions, and return valid JSON.
+Use Gemini only after checking Google's current Gemini API terms for your use case.
 
 Older `.env` files that use `OPENAI_API_KEY`, `OPENAI_MODEL`, or `OPENAI_BASE_URL` still work, but new setups should use the `LLM_*` names.
 
