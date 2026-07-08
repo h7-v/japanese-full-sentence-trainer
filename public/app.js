@@ -1,5 +1,10 @@
 const statusText = document.querySelector("#statusText");
 const appVersion = document.querySelector("#appVersion");
+const updateBanner = document.querySelector("#updateBanner");
+const updateTitle = document.querySelector("#updateTitle");
+const updateText = document.querySelector("#updateText");
+const installUpdateButton = document.querySelector("#installUpdateButton");
+const openReleaseLink = document.querySelector("#openReleaseLink");
 const syncButton = document.querySelector("#syncButton");
 const previousButton = document.querySelector("#previousButton");
 const skipMissedButton = document.querySelector("#skipMissedButton");
@@ -226,6 +231,7 @@ let csvBusy = false;
 let csvText = "";
 
 syncButton.addEventListener("click", syncBunpro);
+installUpdateButton.addEventListener("click", installUpdate);
 previousButton.addEventListener("click", showPreviousSentence);
 skipMissedButton.addEventListener("click", skipToMissed);
 nextButton.addEventListener("click", showNextSentence);
@@ -288,8 +294,48 @@ async function boot() {
     } else {
       renderJlptFilter([]);
     }
+    void checkForUpdates();
   } catch (error) {
     statusText.textContent = error.message;
+  }
+}
+
+async function checkForUpdates() {
+  try {
+    const update = await api("/api/update/check");
+    renderUpdateBanner(update);
+  } catch {
+    updateBanner.classList.add("hidden");
+  }
+}
+
+function renderUpdateBanner(update) {
+  if (!update?.updateAvailable) {
+    updateBanner.classList.add("hidden");
+    return;
+  }
+
+  updateTitle.textContent = `Update available: v${update.latestVersion}`;
+  updateText.textContent = update.canInstall
+    ? "Download and install now. Your .env and cache folder will be preserved."
+    : "Open the GitHub release page to download the update. Your .env and cache folder should be copied into the new release folder.";
+  openReleaseLink.href = update.releasePage || "https://github.com/h7-v/japanese-full-sentence-trainer/releases";
+  installUpdateButton.classList.toggle("hidden", !update.canInstall);
+  installUpdateButton.disabled = false;
+  updateBanner.classList.remove("hidden");
+}
+
+async function installUpdate() {
+  installUpdateButton.disabled = true;
+  updateTitle.textContent = "Installing update";
+  updateText.textContent = "Downloading the update. The app will close and restart when installation begins.";
+  try {
+    const result = await api("/api/update/start", { method: "POST" });
+    updateText.textContent = result.message || "Update started. The app will close and restart.";
+  } catch (error) {
+    updateTitle.textContent = "Update failed";
+    updateText.textContent = error.message;
+    installUpdateButton.disabled = false;
   }
 }
 

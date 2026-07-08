@@ -3,6 +3,7 @@ const http = require("http");
 const path = require("path");
 const { spawn } = require("child_process");
 const { URL } = require("url");
+const { readAppVersion } = require("./scripts/version");
 
 const ROOT = process.pkg ? path.dirname(process.execPath) : __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
@@ -12,9 +13,16 @@ const STARTUP_ERROR_LOG = path.join(ROOT, "startup-error.log");
 const SYNC_CACHE_FILE = path.join(CACHE_DIR, "bunpro-sync.json");
 const ANKI_CACHE_PREFIX = "anki-deck-";
 const CSV_CACHE_PREFIX = "csv-file-";
+const UPDATES_DIR = path.join(ROOT, "updates");
 const BUNPRO_BASE_URL = "https://api.bunpro.jp/api/frontend";
 const ANKI_CONNECT_URL = process.env.ANKI_CONNECT_URL || "http://127.0.0.1:8765";
-const APP_VERSION = "0.2.2";
+const APP_VERSION = readAppVersion();
+const GITHUB_REPO = "h7-v/japanese-full-sentence-trainer";
+const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`;
+const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+const RELEASE_NAME_PREFIX = "japanese-fst-";
+const CACHE_SCHEMA_VERSION = 1;
+const LEGACY_CACHE_APP_VERSION = "0.2.2";
 const DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 const DEFAULT_LLM_MODEL = "gemini-3.5-flash";
 const DEFAULT_FEEDBACK_LANGUAGE = "english";
@@ -97,6 +105,7 @@ const server = http.createServer(async (req, res) => {
         sentenceCount: getAllSentences().length,
         jlptLevels: getAvailableJlptLevels(),
         practiceFilters: getPracticeFilters(),
+        bunproCacheMetadata: state.cacheMetadata || null,
         overview: state.overview
       });
     }
@@ -116,6 +125,18 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req);
       const result = await testLlmConnection(body);
       return sendJson(res, 200, result);
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/update/check") {
+      const result = await checkForUpdate();
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/update/start") {
+      const result = await startUpdate();
+      sendJson(res, 200, result);
+      setTimeout(() => process.exit(0), 1000);
+      return;
     }
 
     if (req.method === "GET" && url.pathname === "/api/sentences") {
@@ -371,6 +392,220 @@ function saveSettings(body) {
     feedbackLanguage: config.feedbackLanguage,
     customInstructions: config.customInstructions
   };
+}
+
+async function checkForUpdate() {
+  const target = getReleaseTarget();
+  const result = {
+    currentVersion: APP_VERSION,
+    latestVersion: APP_VERSION,
+    updateAvailable: false,
+    supported: Boolean(target),
+    packaged: Boolean(process.pkg),
+    canInstall: false,
+    releasePage: RELEASES_URL,
+    target: target?.name || null,
+    assetName: null,
+    message: ""
+  };
+
+  if (!target) {
+    result.message = "Automatic updates are not available for this platform.";
+    return result;
+  }
+
+  const release = await fetchLatestRelease();
+  const latestVersion = normalizeVersion(release.tag_name || release.name || "");
+  result.latestVersion = latestVersion || APP_VERSION;
+  result.updateAvailable = compareVersions(result.latestVersion, APP_VERSION) > 0;
+  result.releasePage = release.html_url || RELEASES_URL;
+
+  if (!result.updateAvailable) {
+    result.message = "You are up to date.";
+    return result;
+  }
+
+  const assetName = `${RELEASE_NAME_PREFIX}v${result.latestVersion}-${target.name}.zip`;
+  const asset = Array.isArray(release.assets)
+    ? release.assets.find((item) => item.name === assetName)
+    : null;
+  result.assetName = assetName;
+  result.canInstall = Boolean(process.pkg && asset?.browser_download_url && fs.existsSync(getUpdaterPath(target)));
+  result.message = result.canInstall
+    ? `Update ${result.latestVersion} is available.`
+    : `Update ${result.latestVersion} is available on GitHub.`;
+  return result;
+}
+
+async function startUpdate() {
+  const target = getReleaseTarget();
+  if (!target) {
+    const err = new Error("Automatic updates are not available for this platform.");
+    err.statusCode = 400;
+    err.publicMessage = "Automatic updates are not available for this platform.";
+    throw err;
+  }
+  if (!process.pkg) {
+    const err = new Error("Automatic updates are only available in packaged releases.");
+    err.statusCode = 400;
+    err.publicMessage = "Automatic updates are only available in packaged releases.";
+    err.publicDetail = "If you run from source, update with Git instead.";
+    throw err;
+  }
+
+  const release = await fetchLatestRelease();
+  const latestVersion = normalizeVersion(release.tag_name || release.name || "");
+  if (compareVersions(latestVersion, APP_VERSION) <= 0) {
+    return { ok: true, message: "You are already up to date.", releasePage: release.html_url || RELEASES_URL };
+  }
+
+  const assetName = `${RELEASE_NAME_PREFIX}v${latestVersion}-${target.name}.zip`;
+  const asset = Array.isArray(release.assets)
+    ? release.assets.find((item) => item.name === assetName)
+    : null;
+  if (!asset?.browser_download_url) {
+    const err = new Error(`Could not find release asset ${assetName}.`);
+    err.statusCode = 404;
+    err.publicMessage = "Update package not found.";
+    err.publicDetail = `The latest release does not include ${assetName}.`;
+    throw err;
+  }
+
+  const updaterPath = getUpdaterPath(target);
+  if (!fs.existsSync(updaterPath)) {
+    const err = new Error("Updater executable is missing.");
+    err.statusCode = 400;
+    err.publicMessage = "Updater executable is missing.";
+    err.publicDetail = `Expected ${target.updaterName} in the app folder.`;
+    throw err;
+  }
+
+  fs.mkdirSync(UPDATES_DIR, { recursive: true });
+  const zipPath = path.join(UPDATES_DIR, assetName);
+  await downloadFile(asset.browser_download_url, zipPath);
+
+  const runningUpdaterPath = copyUpdaterForLaunch(updaterPath, target);
+  const restartName = getRestartName(target);
+  const child = spawn(runningUpdaterPath, [
+    "--zip", zipPath,
+    "--target", ROOT,
+    "--restart", restartName,
+    "--wait-pid", String(process.pid)
+  ], {
+    cwd: ROOT,
+    detached: true,
+    stdio: "ignore"
+  });
+  child.unref();
+
+  return {
+    ok: true,
+    latestVersion,
+    message: "Update downloaded. The app will close, install the update, and restart.",
+    releasePage: release.html_url || RELEASES_URL
+  };
+}
+
+async function fetchLatestRelease() {
+  const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "japanese-full-sentence-trainer"
+    }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error("Could not check for updates.");
+    err.statusCode = response.status;
+    err.publicMessage = "Could not check for updates.";
+    err.publicDetail = payload.message || response.statusText;
+    throw err;
+  }
+  return payload;
+}
+
+async function downloadFile(url, destinationPath) {
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "japanese-full-sentence-trainer"
+    }
+  });
+  if (!response.ok) {
+    const err = new Error("Could not download update.");
+    err.statusCode = response.status;
+    err.publicMessage = "Could not download update.";
+    err.publicDetail = response.statusText;
+    throw err;
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  fs.writeFileSync(destinationPath, buffer);
+}
+
+function copyUpdaterForLaunch(updaterPath, target) {
+  const extension = path.extname(target.updaterName);
+  const runningUpdaterPath = path.join(UPDATES_DIR, `updater-running-${Date.now()}${extension}`);
+  fs.copyFileSync(updaterPath, runningUpdaterPath);
+  if (process.platform !== "win32") {
+    fs.chmodSync(runningUpdaterPath, 0o755);
+  }
+  return runningUpdaterPath;
+}
+
+function getUpdaterPath(target) {
+  return path.join(ROOT, target.updaterName);
+}
+
+function getRestartName(target) {
+  if (process.platform === "win32" && fs.existsSync(path.join(ROOT, "Start Japanese Full Sentence Trainer.cmd"))) {
+    return "Start Japanese Full Sentence Trainer.cmd";
+  }
+  return target.executableName;
+}
+
+function getReleaseTarget() {
+  if (process.platform === "win32" && process.arch === "x64") {
+    return {
+      name: "win-x64",
+      executableName: "Japanese Full Sentence Trainer.exe",
+      updaterName: "Japanese Full Sentence Trainer Updater.exe"
+    };
+  }
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return {
+      name: "macos-arm64",
+      executableName: "Japanese Full Sentence Trainer",
+      updaterName: "Japanese Full Sentence Trainer Updater"
+    };
+  }
+  if (process.platform === "darwin" && process.arch === "x64") {
+    return {
+      name: "macos-x64",
+      executableName: "Japanese Full Sentence Trainer",
+      updaterName: "Japanese Full Sentence Trainer Updater"
+    };
+  }
+  if (process.platform === "linux" && process.arch === "x64") {
+    return {
+      name: "linux-x64",
+      executableName: "japanese-full-sentence-trainer",
+      updaterName: "japanese-full-sentence-trainer-updater"
+    };
+  }
+  return null;
+}
+
+function normalizeVersion(value) {
+  const match = String(value || "").match(/v?(\d+\.\d+\.\d+)/i);
+  return match ? match[1] : "";
+}
+
+function compareVersions(a, b) {
+  const aParts = String(a || "0.0.0").split(".").map((part) => Number(part) || 0);
+  const bParts = String(b || "0.0.0").split(".").map((part) => Number(part) || 0);
+  for (let i = 0; i < 3; i += 1) {
+    if (aParts[i] !== bParts[i]) return aParts[i] - bParts[i];
+  }
+  return 0;
 }
 
 async function getAnkiDecks() {
@@ -1353,6 +1588,7 @@ function getAnkiImportSummaries() {
     deck: deckImport.deck,
     syncedAt: deckImport.syncedAt,
     syncedAtDisplay: deckImport.syncedAtDisplay,
+    cacheMetadata: deckImport.cacheMetadata || null,
     sentenceCount: deckImport.sentences.length
   }));
 }
@@ -1362,6 +1598,7 @@ function getCsvImportSummaries() {
     sourceName: csvImport.sourceName,
     syncedAt: csvImport.syncedAt,
     syncedAtDisplay: csvImport.syncedAtDisplay,
+    cacheMetadata: csvImport.cacheMetadata || null,
     sentenceCount: csvImport.sentences.length,
     skippedRowCount: csvImport.skippedRowCount || 0,
     truncatedFieldCount: csvImport.truncatedFieldCount || 0
@@ -1522,6 +1759,7 @@ function loadSyncCache() {
 function saveSyncCache() {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const payload = {
+    ...createCacheMetadata("bunpro"),
     savedAt: new Date().toISOString(),
     syncedAt: state.syncedAt,
     syncedAtDisplay: state.syncedAtDisplay,
@@ -1533,11 +1771,13 @@ function saveSyncCache() {
 }
 
 function applySyncCache(payload) {
+  const cacheMetadata = normalizeCacheMetadata(payload, "bunpro");
   state.syncedAt = payload.syncedAt || payload.savedAt || null;
   state.syncedAtDisplay = payload.syncedAtDisplay || formatLocalTimestamp(state.syncedAt);
   state.overview = payload.overview || null;
   state.grammarPoints = Array.isArray(payload.grammarPoints) ? payload.grammarPoints : [];
   state.sentences = Array.isArray(payload.sentences) ? payload.sentences : [];
+  state.cacheMetadata = cacheMetadata;
   state.grammarById = new Map(state.grammarPoints.map((point) => [String(point.id), point]));
   state.hydrateCache = new Map();
   for (const point of state.grammarPoints) {
@@ -1575,6 +1815,7 @@ function saveAnkiCache(deck) {
   if (!deckImport) return;
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const payload = {
+    ...createCacheMetadata("anki"),
     savedAt: new Date().toISOString(),
     deck: deckImport.deck,
     syncedAt: deckImport.syncedAt,
@@ -1592,6 +1833,7 @@ function saveCsvCache(sourceName) {
   if (!csvImport) return;
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const payload = {
+    ...createCacheMetadata("csv"),
     savedAt: new Date().toISOString(),
     sourceName: csvImport.sourceName,
     syncedAt: csvImport.syncedAt,
@@ -1607,6 +1849,7 @@ function saveCsvCache(sourceName) {
 }
 
 function applyAnkiCache(payload) {
+  const cacheMetadata = normalizeCacheMetadata(payload, "anki");
   const deck = payload.deck || payload.ankiDeck || null;
   if (!deck) return;
   const syncedAt = payload.syncedAt || payload.ankiSyncedAt || payload.savedAt || null;
@@ -1621,6 +1864,7 @@ function applyAnkiCache(payload) {
     englishField: payload.englishField || "",
     japaneseField: payload.japaneseField || "",
     grammarHintField: payload.grammarHintField || "",
+    cacheMetadata,
     sentences: Array.isArray(payload.sentences)
       ? payload.sentences
       : Array.isArray(payload.ankiSentences)
@@ -1630,6 +1874,7 @@ function applyAnkiCache(payload) {
 }
 
 function applyCsvCache(payload) {
+  const cacheMetadata = normalizeCacheMetadata(payload, "csv");
   const sourceName = payload.sourceName || payload.fileName || null;
   if (!sourceName) return;
   const syncedAt = payload.syncedAt || payload.savedAt || null;
@@ -1646,8 +1891,29 @@ function applyCsvCache(payload) {
     hintColumn: Number(payload.hintColumn ?? -1),
     skippedRowCount: Number(payload.skippedRowCount || 0),
     truncatedFieldCount: Number(payload.truncatedFieldCount || 0),
+    cacheMetadata,
     sentences: Array.isArray(payload.sentences) ? payload.sentences : []
   });
+}
+
+function createCacheMetadata(source) {
+  return {
+    cacheSchemaVersion: CACHE_SCHEMA_VERSION,
+    createdByAppVersion: APP_VERSION,
+    updatedByAppVersion: APP_VERSION,
+    cacheSource: source
+  };
+}
+
+function normalizeCacheMetadata(payload, source) {
+  const schemaVersion = Number(payload?.cacheSchemaVersion || CACHE_SCHEMA_VERSION);
+  const createdByAppVersion = String(payload?.createdByAppVersion || LEGACY_CACHE_APP_VERSION);
+  return {
+    cacheSchemaVersion: Number.isFinite(schemaVersion) ? schemaVersion : CACHE_SCHEMA_VERSION,
+    createdByAppVersion,
+    updatedByAppVersion: String(payload?.updatedByAppVersion || createdByAppVersion),
+    cacheSource: String(payload?.cacheSource || source)
+  };
 }
 
 function getAnkiCacheFiles() {

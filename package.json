@@ -4,7 +4,14 @@
   "private": true,
   "type": "commonjs",
   "bin": "server.js",
+  "pkg": {
+    "assets": [
+      "version.json",
+      "scripts/version.js"
+    ]
+  },
   "scripts": {
+    "version:set": "node scripts/set-version.js",
     "start": "node server.js",
     "dev": "node server.js",
     "package:mac-arm64": "node scripts/package-release.js macos-arm64",

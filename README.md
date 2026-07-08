@@ -183,12 +183,31 @@ The app keeps a count of questions answered this session. Pressing Next without 
 - `.env.example` shows supported settings.
 - `.env` is created when you save keys/settings in the browser UI.
 - `cache/` stores local Bunpro, Anki, and CSV imports.
+- `updates/` stores downloaded updates and backup folders made during automatic updates.
 - `public/` contains the browser UI and images.
 - `startup-error.log` appears if the app crashes during startup.
 
 Do not share `.env`. It contains private API keys and tokens.
 
+Cache files include a cache schema version and the app version that wrote them. Older cache files without this metadata are treated as cache schema version 1 from app version 0.2.2.
+
 To stop the packaged app, close the command/terminal window that opened with it.
+
+## Updating The App
+
+Packaged releases check GitHub for newer releases when the app starts. If an update is available, the app shows an update banner.
+
+Click **Install update** to download the matching release ZIP for your computer. The app then closes, runs the included updater, replaces the app files, and restarts.
+
+Automatic updates preserve:
+
+- `.env`
+- `cache/`
+- `updates/`
+
+The updater also creates a backup folder under `updates/` before replacing files. If something goes wrong, check `update-error.log` or the backup folder in `updates/`.
+
+If you run the app from source, automatic install is disabled. Update with Git instead.
 
 ## Detailed Bunpro Token Instructions
 
@@ -383,32 +402,46 @@ These commands are for maintainers. They create portable release folders in `dis
 
 Building releases requires Node.js 22 or newer because the packaging tool runs on modern Node. Running the app from source only requires Node.js 18 or newer.
 
+Set the project version in one place first:
+
+```sh
+npm run version:set -- 0.2.3
+```
+
+That updates `version.json`, `package.json`, `package-lock.json`, and README release examples.
+
 ```sh
 npm install
-npm run package:mac-arm64 -- 0.2.2
-npm run package:mac-x64 -- 0.2.2
-npm run package:win-x64 -- 0.2.2
-npm run package:linux-x64 -- 0.2.2
+npm run package:mac-arm64 -- 0.2.3
+npm run package:mac-x64 -- 0.2.3
+npm run package:win-x64 -- 0.2.3
+npm run package:linux-x64 -- 0.2.3
 ```
 
 You can also build all configured targets:
 
 ```sh
-npm run package:all -- 0.2.2
+npm run package:all -- 0.2.3
 ```
 
-The version argument is required and must use `x.x.x` format.
+The version argument is required, must use `x.x.x` format, and must match `version.json`.
 
-The output folders are:
+The output folders and ZIP assets are:
 
 ```text
-dist/japanese-fst-v0.2.2-win-x64
-dist/japanese-fst-v0.2.2-macos-arm64
-dist/japanese-fst-v0.2.2-macos-x64
-dist/japanese-fst-v0.2.2-linux-x64
+dist/japanese-fst-v0.2.3-win-x64
+dist/japanese-fst-v0.2.3-win-x64.zip
+dist/japanese-fst-v0.2.3-macos-arm64
+dist/japanese-fst-v0.2.3-macos-arm64.zip
+dist/japanese-fst-v0.2.3-macos-x64
+dist/japanese-fst-v0.2.3-macos-x64.zip
+dist/japanese-fst-v0.2.3-linux-x64
+dist/japanese-fst-v0.2.3-linux-x64.zip
 ```
 
-Each release folder includes a standalone executable, `public/`, `.env.example`, `cache/`, and `START-HERE.txt`. Windows builds also include `Start Japanese Full Sentence Trainer.cmd`. Zip the whole folder for release.
+Each release folder includes a standalone executable, an updater executable, `public/`, `.env.example`, `cache/`, and `START-HERE.txt`. Windows builds also include `Start Japanese Full Sentence Trainer.cmd`.
+
+Upload the generated `.zip` files to the GitHub release. The in-app updater looks for release assets named exactly like the generated ZIP files.
 
 ## Features
 

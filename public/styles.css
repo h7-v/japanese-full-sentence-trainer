@@ -110,7 +110,7 @@ a:hover {
   height: calc(100dvh - 36px);
   margin: 20px auto 16px;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -162,6 +162,43 @@ a:hover {
   text-align: right;
   font-weight: 800;
   line-height: 1.25;
+}
+
+.update-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(188, 0, 45, 0.1);
+}
+
+.update-banner p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.secondary-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0 14px;
+  color: var(--accent-strong);
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .trainer {
