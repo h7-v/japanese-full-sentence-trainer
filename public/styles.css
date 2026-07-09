@@ -498,6 +498,49 @@ summary {
   gap: 10px;
 }
 
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.stat-card {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+}
+
+.stat-card span,
+.stats-row span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.stat-card strong {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 1.8rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.stats-breakdown {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .settings-field,
 .anki-field {
   display: grid;

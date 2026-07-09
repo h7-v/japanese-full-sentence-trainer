@@ -14,7 +14,7 @@
           <p id="statusText">Checking local setup...</p>
         </div>
         <div class="topbar-actions">
-          <p id="answeredSessionCount" class="session-count" aria-live="polite">Questions answered this session: 0</p>
+          <p id="answeredSessionCount" class="session-count" aria-live="polite">Questions answered this session: 0 · Lifetime questions answered: 0</p>
           <div class="practice-settings">
             <span id="retryStatus" aria-live="polite">No retries waiting</span>
           </div>
@@ -119,6 +119,7 @@
             <button id="otherTabButton" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="otherSettingsPanel" data-settings-tab="other">Other</button>
             <button id="llmTabButton" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="llmSettingsPanel" data-settings-tab="llm">LLM</button>
             <button id="feedbackTabButton" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="feedbackSettingsPanel" data-settings-tab="feedback">Model Personalisation</button>
+            <button id="statsTabButton" class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="statsSettingsPanel" data-settings-tab="stats">Stats</button>
           </div>
           <div class="settings-modal-body">
             <section id="startSettingsPanel" class="settings-tab-panel setup-panel" role="tabpanel" aria-labelledby="startTabButton" data-settings-panel="start">
@@ -305,6 +306,50 @@
                 <button id="resetSessionButton" class="secondary" type="button">Reset session stats / clear retry queue</button>
                 <p id="resetSessionStatus" class="settings-status" aria-live="polite"></p>
               </div>
+            </section>
+            <section id="statsSettingsPanel" class="settings-tab-panel hidden" role="tabpanel" aria-labelledby="statsTabButton" data-settings-panel="stats">
+              <h3>Lifetime stats</h3>
+              <div class="stats-grid" aria-live="polite">
+                <div class="stat-card">
+                  <span>Total answered</span>
+                  <strong id="statsTotalAnswered">0</strong>
+                </div>
+                <div class="stat-card">
+                  <span>Correct rate</span>
+                  <strong id="statsSuccessRate">0%</strong>
+                </div>
+                <div class="stat-card">
+                  <span>Average score</span>
+                  <strong id="statsAverageScore">0.0</strong>
+                </div>
+                <div class="stat-card">
+                  <span>Total score</span>
+                  <strong id="statsTotalScore">0</strong>
+                </div>
+              </div>
+              <div class="stats-breakdown">
+                <div class="stats-row">
+                  <span>Correct</span>
+                  <strong id="statsCorrect">0</strong>
+                </div>
+                <div class="stats-row">
+                  <span>Close</span>
+                  <strong id="statsClose">0</strong>
+                </div>
+                <div class="stats-row">
+                  <span>Incorrect</span>
+                  <strong id="statsIncorrect">0</strong>
+                </div>
+                <div class="stats-row">
+                  <span>Retry questions answered</span>
+                  <strong id="statsRetryAnswered">0</strong>
+                </div>
+                <div class="stats-row">
+                  <span>Correction drills completed</span>
+                  <strong id="statsDrillsCompleted">0</strong>
+                </div>
+              </div>
+              <p id="lifetimeStatsStatus" class="settings-status" aria-live="polite"></p>
             </section>
             <section id="llmSettingsPanel" class="settings-tab-panel hidden" role="tabpanel" aria-labelledby="llmTabButton" data-settings-panel="llm">
               <h3>LLM settings</h3>

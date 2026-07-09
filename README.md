@@ -182,7 +182,7 @@ The app keeps a count of questions answered this session. Pressing Next without 
 
 - `.env.example` shows supported settings.
 - `.env` is created when you save keys/settings in the browser UI.
-- `cache/` stores local Bunpro, Anki, and CSV imports.
+- `cache/` stores local Bunpro, Anki, and CSV imports, plus `cache/stats.json` for lifetime stats.
 - `updates/` stores downloaded updates and backup folders made during automatic updates.
 - `public/` contains the browser UI and images.
 - `startup-error.log` appears if the app crashes during startup.
@@ -190,6 +190,8 @@ The app keeps a count of questions answered this session. Pressing Next without 
 Do not share `.env`. It contains private API keys and tokens.
 
 Cache files include a cache schema version and the app version that wrote them. Older cache files without this metadata are treated as cache schema version 1 from app version 0.2.2.
+
+To reset lifetime stats, close the app and delete `cache/stats.json`.
 
 To stop the packaged app, close the command/terminal window that opened with it.
 
@@ -264,6 +266,7 @@ Do not share:
 - `cache/bunpro-sync.json`, if you consider your studied grammar data private
 - `cache/anki-deck-*.json`, if you consider your imported Anki sentences private
 - `cache/csv-file-*.json`, if you consider your imported CSV sentences private
+- `cache/stats.json`, if you consider your practice totals private
 
 ## Troubleshooting
 
@@ -405,23 +408,23 @@ Building releases requires Node.js 22 or newer because the packaging tool runs o
 Set the project version in one place first:
 
 ```sh
-npm run version:set -- 0.3.5
+npm run version:set -- 0.3.6
 ```
 
 That updates `version.json`, `package.json`, `package-lock.json`, and README release examples.
 
 ```sh
 npm install
-npm run package:mac-arm64 -- 0.3.5
-npm run package:mac-x64 -- 0.3.5
-npm run package:win-x64 -- 0.3.5
-npm run package:linux-x64 -- 0.3.5
+npm run package:mac-arm64 -- 0.3.6
+npm run package:mac-x64 -- 0.3.6
+npm run package:win-x64 -- 0.3.6
+npm run package:linux-x64 -- 0.3.6
 ```
 
 You can also build all configured targets:
 
 ```sh
-npm run package:all -- 0.3.5
+npm run package:all -- 0.3.6
 ```
 
 The version argument is required, must use `x.x.x` format, and must match `version.json`.
@@ -429,14 +432,14 @@ The version argument is required, must use `x.x.x` format, and must match `versi
 The output folders and ZIP assets are:
 
 ```text
-dist/japanese-fst-v0.3.5-win-x64
-dist/japanese-fst-v0.3.5-win-x64.zip
-dist/japanese-fst-v0.3.5-macos-arm64
-dist/japanese-fst-v0.3.5-macos-arm64.zip
-dist/japanese-fst-v0.3.5-macos-x64
-dist/japanese-fst-v0.3.5-macos-x64.zip
-dist/japanese-fst-v0.3.5-linux-x64
-dist/japanese-fst-v0.3.5-linux-x64.zip
+dist/japanese-fst-v0.3.6-win-x64
+dist/japanese-fst-v0.3.6-win-x64.zip
+dist/japanese-fst-v0.3.6-macos-arm64
+dist/japanese-fst-v0.3.6-macos-arm64.zip
+dist/japanese-fst-v0.3.6-macos-x64
+dist/japanese-fst-v0.3.6-macos-x64.zip
+dist/japanese-fst-v0.3.6-linux-x64
+dist/japanese-fst-v0.3.6-linux-x64.zip
 ```
 
 Each release folder includes a standalone executable, an updater executable, `public/`, `.env.example`, `cache/`, and `START-HERE.txt`. Windows builds also include `Start Japanese Full Sentence Trainer.cmd`.

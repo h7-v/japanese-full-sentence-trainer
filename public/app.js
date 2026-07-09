@@ -56,6 +56,16 @@ const resetSessionButton = document.querySelector("#resetSessionButton");
 const resetSessionStatus = document.querySelector("#resetSessionStatus");
 const grammarRotationToggle = document.querySelector("#grammarRotationToggle");
 const grammarRotationStatus = document.querySelector("#grammarRotationStatus");
+const statsTotalAnswered = document.querySelector("#statsTotalAnswered");
+const statsSuccessRate = document.querySelector("#statsSuccessRate");
+const statsAverageScore = document.querySelector("#statsAverageScore");
+const statsTotalScore = document.querySelector("#statsTotalScore");
+const statsCorrect = document.querySelector("#statsCorrect");
+const statsClose = document.querySelector("#statsClose");
+const statsIncorrect = document.querySelector("#statsIncorrect");
+const statsRetryAnswered = document.querySelector("#statsRetryAnswered");
+const statsDrillsCompleted = document.querySelector("#statsDrillsCompleted");
+const lifetimeStatsStatus = document.querySelector("#lifetimeStatsStatus");
 const bunproSettingsForm = document.querySelector("#bunproSettingsForm");
 const bunproTokenInput = document.querySelector("#bunproTokenInput");
 const saveBunproTokenButton = document.querySelector("#saveBunproTokenButton");
@@ -222,6 +232,7 @@ let answeredThisSessionCount = 0;
 let retryQueue = [];
 let recentQuestionIds = [];
 let answeredGrammarPointIds = new Set();
+let lifetimeStats = createEmptyLifetimeStats();
 let sentencePool = [];
 let availablePracticeFilters = [];
 let selectedPracticeFilters = new Set();
@@ -285,6 +296,8 @@ async function boot() {
     initializeRetryDelayPreference();
     initializeDemoSentencesPreference();
     initializeGrammarRotationPreference();
+    renderLifetimeStats();
+    await loadLifetimeStats();
     const status = await api("/api/status");
     renderStatus(status);
     updateSettingsPlaceholders(status);
@@ -375,6 +388,8 @@ function showSettingsTab(tab) {
     const isActive = panel.dataset.settingsPanel === nextTab;
     panel.classList.toggle("hidden", !isActive);
   }
+
+  if (nextTab === "stats") requestAnimationFrame(fitStatValues);
 }
 
 function renderGettingStarted(status) {
@@ -541,6 +556,7 @@ async function gradeAnswer(event) {
     renderGrade(result);
     const entry = getCurrentEntry();
     if (entry) {
+      await recordLifetimeGrade(entry, result);
       markEntryAnswered(entry);
       entry.answer = answer;
       entry.grade = result;
@@ -1383,11 +1399,11 @@ function renderDrill(verdict) {
   drillInput.focus();
 }
 
-function checkDrillAnswer(event) {
+async function checkDrillAnswer(event) {
   event.preventDefault();
   const entry = getCurrentEntry();
   if (entry?.drillComplete) {
-    void showNextSentence();
+    await showNextSentence();
     return;
   }
 
@@ -1395,7 +1411,10 @@ function checkDrillAnswer(event) {
   const matches = currentCorrectAnswers.some((answer) => normalizeAnswer(answer) === typedAnswer);
 
   if (matches) {
-    if (entry) entry.drillComplete = true;
+    if (entry && !entry.drillComplete) {
+      entry.drillComplete = true;
+      await recordDrillCompleted();
+    }
     drillFeedback.textContent = "Correct. Nice, lock it in.";
     drillFeedback.className = "drill-ok";
     drillButton.textContent = "Next";
@@ -1471,7 +1490,115 @@ function markEntryAnswered(entry) {
 }
 
 function renderAnsweredSessionCount() {
-  answeredSessionCount.textContent = `Questions answered this session: ${answeredThisSessionCount}`;
+  answeredSessionCount.textContent = `Questions answered this session: ${formatNumber(answeredThisSessionCount)} · Lifetime questions answered: ${formatNumber(lifetimeStats.totalAnswered)}`;
+}
+
+async function recordLifetimeGrade(entry, result) {
+  if (entry.answered) return;
+  const verdict = normalizeVerdict(result.verdict);
+  try {
+    const payload = await api("/api/stats/grade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        verdict,
+        score: normalizeScore(result.score),
+        isRetry: entry.source === "retry",
+        retryScheduled: verdict !== "correct"
+      })
+    });
+    renderLifetimeStats(payload.stats);
+  } catch (error) {
+    lifetimeStatsStatus.textContent = `Could not save stats: ${error.message}`;
+  }
+}
+
+async function recordDrillCompleted() {
+  try {
+    const payload = await api("/api/stats/drill", { method: "POST" });
+    renderLifetimeStats(payload.stats);
+  } catch (error) {
+    lifetimeStatsStatus.textContent = `Could not save stats: ${error.message}`;
+  }
+}
+
+async function loadLifetimeStats() {
+  try {
+    const payload = await api("/api/stats");
+    renderLifetimeStats(payload.stats);
+  } catch (error) {
+    lifetimeStatsStatus.textContent = `Could not load stats: ${error.message}`;
+  }
+}
+
+function normalizeLifetimeStats(stats) {
+  const defaults = createEmptyLifetimeStats();
+  const parsed = stats || {};
+  return {
+    ...defaults,
+    ...parsed,
+    totalAnswered: Number(parsed.totalAnswered || 0),
+    correct: Number(parsed.correct || 0),
+    close: Number(parsed.close || 0),
+    incorrect: Number(parsed.incorrect || 0),
+    totalScore: Number(parsed.totalScore || 0),
+    retryScheduled: Number(parsed.retryScheduled || 0),
+    retryAnswered: Number(parsed.retryAnswered || 0),
+    drillsCompleted: Number(parsed.drillsCompleted || 0)
+  };
+}
+
+function createEmptyLifetimeStats() {
+  return {
+    totalAnswered: 0,
+    correct: 0,
+    close: 0,
+    incorrect: 0,
+    totalScore: 0,
+    retryScheduled: 0,
+    retryAnswered: 0,
+    drillsCompleted: 0,
+    createdAt: null,
+    updatedAt: null
+  };
+}
+
+function renderLifetimeStats(stats = lifetimeStats) {
+  lifetimeStats = normalizeLifetimeStats(stats);
+  stats = lifetimeStats;
+  const total = stats.totalAnswered;
+  statsTotalAnswered.textContent = formatNumber(total);
+  statsSuccessRate.textContent = total > 0 ? `${Math.round((stats.correct / total) * 100)}%` : "0%";
+  statsAverageScore.textContent = total > 0 ? (stats.totalScore / total).toFixed(1) : "0.0";
+  statsTotalScore.textContent = formatNumber(stats.totalScore);
+  statsCorrect.textContent = formatNumber(stats.correct);
+  statsClose.textContent = formatNumber(stats.close);
+  statsIncorrect.textContent = formatNumber(stats.incorrect);
+  statsRetryAnswered.textContent = formatNumber(stats.retryAnswered);
+  statsDrillsCompleted.textContent = formatNumber(stats.drillsCompleted);
+  renderAnsweredSessionCount();
+  requestAnimationFrame(fitStatValues);
+}
+
+function fitStatValues() {
+  for (const value of document.querySelectorAll(".stat-card strong")) {
+    if (value.clientWidth === 0) continue;
+    value.style.fontSize = "";
+    let size = 1.8;
+    while (value.scrollWidth > value.clientWidth && size > 0.8) {
+      size -= 0.1;
+      value.style.fontSize = `${size.toFixed(1)}rem`;
+    }
+  }
+}
+
+function normalizeVerdict(verdict) {
+  const value = String(verdict || "").toLowerCase();
+  return ["correct", "close", "incorrect"].includes(value) ? value : "incorrect";
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat().format(Number(value || 0));
 }
 
 function isCurrentAnswerCorrect() {

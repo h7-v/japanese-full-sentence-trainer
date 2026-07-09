@@ -11,6 +11,7 @@ const CACHE_DIR = path.join(ROOT, "cache");
 const ENV_FILE = path.join(ROOT, ".env");
 const STARTUP_ERROR_LOG = path.join(ROOT, "startup-error.log");
 const SYNC_CACHE_FILE = path.join(CACHE_DIR, "bunpro-sync.json");
+const STATS_FILE = path.join(CACHE_DIR, "stats.json");
 const ANKI_CACHE_PREFIX = "anki-deck-";
 const CSV_CACHE_PREFIX = "csv-file-";
 const UPDATES_DIR = path.join(ROOT, "updates");
@@ -23,6 +24,7 @@ const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`;
 const GITHUB_LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const RELEASE_NAME_PREFIX = "japanese-fst-";
 const CACHE_SCHEMA_VERSION = 1;
+const STATS_SCHEMA_VERSION = 1;
 const LEGACY_CACHE_APP_VERSION = "0.2.2";
 const DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 const DEFAULT_LLM_MODEL = "gemini-3.5-flash";
@@ -138,6 +140,21 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, result);
       setTimeout(() => process.exit(0), 1000);
       return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/stats") {
+      return sendJson(res, 200, { stats: loadStats() });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/stats/grade") {
+      const body = await readJson(req);
+      const result = recordStatsGrade(body);
+      return sendJson(res, 200, { stats: result });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/stats/drill") {
+      const result = recordStatsDrillCompleted();
+      return sendJson(res, 200, { stats: result });
     }
 
     if (req.method === "GET" && url.pathname === "/api/sentences") {
@@ -1956,6 +1973,100 @@ function saveCsvCache(sourceName) {
     sentences: csvImport.sentences
   };
   fs.writeFileSync(getCsvCacheFile(sourceName), JSON.stringify(payload, null, 2));
+}
+
+function loadStats() {
+  if (!fs.existsSync(STATS_FILE)) return createEmptyStats();
+  try {
+    const payload = JSON.parse(fs.readFileSync(STATS_FILE, "utf8"));
+    return normalizeStats(payload);
+  } catch (error) {
+    console.warn(`Could not load stats cache: ${error.message}`);
+    return createEmptyStats();
+  }
+}
+
+function recordStatsGrade(body) {
+  const stats = loadStats();
+  const verdict = normalizeStatsVerdict(body?.verdict);
+  stats.totalAnswered += 1;
+  stats[verdict] += 1;
+  stats.totalScore += normalizeStatsScore(body?.score);
+  if (body?.isRetry) stats.retryAnswered += 1;
+  if (body?.retryScheduled) stats.retryScheduled += 1;
+  return saveStats(stats);
+}
+
+function recordStatsDrillCompleted() {
+  const stats = loadStats();
+  stats.drillsCompleted += 1;
+  return saveStats(stats);
+}
+
+function saveStats(stats) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  const normalized = normalizeStats(stats);
+  const now = new Date().toISOString();
+  const payload = {
+    ...normalized,
+    statsSchemaVersion: STATS_SCHEMA_VERSION,
+    createdByAppVersion: normalized.createdByAppVersion || APP_VERSION,
+    updatedByAppVersion: APP_VERSION,
+    createdAt: normalized.createdAt || now,
+    updatedAt: now
+  };
+  fs.writeFileSync(STATS_FILE, JSON.stringify(payload, null, 2));
+  return payload;
+}
+
+function createEmptyStats() {
+  return {
+    statsSchemaVersion: STATS_SCHEMA_VERSION,
+    createdByAppVersion: APP_VERSION,
+    updatedByAppVersion: APP_VERSION,
+    createdAt: null,
+    updatedAt: null,
+    totalAnswered: 0,
+    correct: 0,
+    close: 0,
+    incorrect: 0,
+    totalScore: 0,
+    retryScheduled: 0,
+    retryAnswered: 0,
+    drillsCompleted: 0
+  };
+}
+
+function normalizeStats(payload) {
+  const defaults = createEmptyStats();
+  return {
+    ...defaults,
+    ...payload,
+    statsSchemaVersion: Number(payload?.statsSchemaVersion || STATS_SCHEMA_VERSION),
+    totalAnswered: normalizeStatsCount(payload?.totalAnswered),
+    correct: normalizeStatsCount(payload?.correct),
+    close: normalizeStatsCount(payload?.close),
+    incorrect: normalizeStatsCount(payload?.incorrect),
+    totalScore: normalizeStatsScore(payload?.totalScore),
+    retryScheduled: normalizeStatsCount(payload?.retryScheduled),
+    retryAnswered: normalizeStatsCount(payload?.retryAnswered),
+    drillsCompleted: normalizeStatsCount(payload?.drillsCompleted)
+  };
+}
+
+function normalizeStatsVerdict(verdict) {
+  const value = String(verdict || "").toLowerCase();
+  return ["correct", "close", "incorrect"].includes(value) ? value : "incorrect";
+}
+
+function normalizeStatsCount(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
+}
+
+function normalizeStatsScore(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) && number > 0 ? number : 0;
 }
 
 function applyAnkiCache(payload) {
